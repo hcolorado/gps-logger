@@ -56,6 +56,16 @@ progress{width:100%}
   <button id="bSW" disabled>Guardar ventanas</button>
 </div>
 
+<div class="c">
+  <h2>Seguimiento LoRa (un solo periodo)</h2>
+  <div class="row"><input id="lIni" inputmode="numeric" placeholder="Inicio hhmm"><input id="lFin" inputmode="numeric" placeholder="Fin hhmm"><input id="lInt" inputmode="numeric" placeholder="Cada (s)" value="30"></div>
+  <button id="bLP" disabled>Programar</button>
+  <button id="bLC" class="s" disabled>Cancelar</button>
+  <button id="bLL" class="s" disabled>Leer</button>
+  <div id="lEst" class="m"></div>
+  <div class="m">Hora local de la placa (UTC-6). Si el fin ya pasó hoy, se programa para mañana. Al terminar, el LoRa se apaga solo.</div>
+</div>
+
 <div class="c"><h2>Registro</h2><div id="log"></div></div>
 </main>
 
@@ -68,7 +78,7 @@ let dev,chCmd,chRsp,chDat,waiters=[],dl=null,dls=null,csvTxt='',nDown=0,guardado
 
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
-const habil=on=>['bDes','bGW','bSW'].forEach(i=>$(i).disabled=!on);
+const habil=on=>['bDes','bGW','bSW','bLP','bLC','bLL'].forEach(i=>$(i).disabled=!on);
 
 // CRC32 (igual al del firmware)
 const T=new Uint32Array(256).map((_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;return c>>>0});
@@ -119,7 +129,7 @@ async function conectar(){
     chRsp.addEventListener('characteristicvaluechanged',onRsp);chDat.addEventListener('characteristicvaluechanged',onDat);
     await chRsp.startNotifications();await chDat.startNotifications();
     estado('Conectado a '+dev.name,'ok');habil(true);
-    await info();await leerVent();
+    await info();await leerVent();await leerLora();
   }catch(e){estado('Error: '+e.message,'er');log('ERR '+e.message)}
 }
 async function info(){
@@ -185,6 +195,21 @@ async function borrar(){
   }catch(e){$('res').textContent='Error al borrar: '+e.message}
 }
 
+const fmtL=u=>new Date((u-6*3600)*1000).toISOString().slice(0,16).replace('T',' ');
+function mostrarLora(t){const p=t.split(',');
+  if(p[0]!=='LORA'){$('lEst').textContent='No válido: '+t+' (revisa horas hhmm e intervalo de 10 a 3600 s)';return}
+  $('lEst').textContent=p[4]==='off'?'Sin programar (LoRa apagado).':'Estado: '+(p[4]==='activo'?'ACTIVO':'programado')+' | '+fmtL(+p[1])+' a '+fmtL(+p[2])+' | cada '+p[3]+' s'}
+async function leerLora(){mostrarLora(await cmd('GETLORA',resp('LORA')))}
+async function progLora(){
+  const hm=v=>{v=v.trim().padStart(4,'0');return[+v.slice(0,2),+v.slice(2)]};
+  const[h1,m1]=hm($('lIni').value),[h2,m2]=hm($('lFin').value);
+  if(!(h1<24&&m1<60&&h2<24&&m2<60)){$('lEst').textContent='Horas no válidas (formato hhmm, por ejemplo 1800)';return}
+  const now=Date.now()/1000,L=new Date(Date.now()-6*3600e3),Y=L.getUTCFullYear(),M=L.getUTCMonth(),D=L.getUTCDate();
+  let a=Date.UTC(Y,M,D,h1+6,m1)/1000,b=Date.UTC(Y,M,D,h2+6,m2)/1000;
+  if(b<=a)b+=86400;if(b<=now){a+=86400;b+=86400}
+  mostrarLora(await cmd('SETLORA,'+a+','+b+','+$('lInt').value.trim(),resp('LORA')))}
+async function cancelarLora(){mostrarLora(await cmd('LORAOFF',resp('LORA')))}
+$('bLP').onclick=()=>progLora().catch(e=>estado(e.message,'er'));$('bLC').onclick=()=>cancelarLora().catch(e=>estado(e.message,'er'));$('bLL').onclick=()=>leerLora().catch(e=>estado(e.message,'er'));
 $('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
 $('bBor').onclick=borrar;$('bGW').onclick=()=>leerVent().catch(e=>estado(e.message,'er'));$('bSW').onclick=()=>guardarVent().catch(e=>estado(e.message,'er'));
 </script>
