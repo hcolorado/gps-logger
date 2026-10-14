@@ -43,6 +43,7 @@ progress{width:100%}
   <textarea id="csv" readonly hidden></textarea>
   <div>
     <button id="bGua" class="s" hidden disabled>Guardar CSV</button>
+    <button id="bSha" class="s" disabled>Compartir archivo .csv</button>
     <button id="bCop" class="s" disabled>Copiar CSV</button>
   </div>
   <div class="m">El borrado se habilita solo después de verificar el CRC y de guardar o copiar el CSV.</div>
@@ -150,7 +151,7 @@ async function guardarVent(){
 }
 
 async function descargar(){
-  habil(false);$('bBor').disabled=true;$('bGua').disabled=true;$('bCop').disabled=true;guardado=false;
+  habil(false);$('bBor').disabled=true;$('bGua').disabled=true;$('bCop').disabled=true;$('bSha').disabled=true;guardado=false;
   $('res').textContent='Descargando...';$('res').className='m';$('pg').hidden=false;$('pg').value=0;
   try{
     dl={seq:0,bytes:0,parts:[],end:null,total:0,last:Date.now()};
@@ -174,7 +175,7 @@ function procesar(o){
     f.push([new Date(u*1000).toISOString().slice(0,19)+'Z',new Date((u-6*3600)*1000).toISOString().slice(0,19).replace('T',' '),
       (dv.getInt32(b+4,true)/1e6).toFixed(6),(dv.getInt32(b+8,true)/1e6).toFixed(6),dv.getInt16(b+12,true),dv.getUint8(b+14),m>>4,MOT[m&15]||m&15].join(','))}
   csvTxt='utc,hora_local,lat,lon,alt_m,vel_kmh,sats,motivo\n'+f.join('\n')+'\n';nDown=o.next;
-  $('csv').value=csvTxt;$('csv').hidden=false;$('bCop').disabled=false;$('bGua').disabled=false;
+  $('csv').value=csvTxt;$('csv').hidden=false;$('bCop').disabled=false;$('bSha').disabled=false;$('bGua').disabled=false;
   $('res').innerHTML='<span class="ok">Verificado: '+n+' registros, CRC '+o.hex+' correcto.</span> Guarda o copia el CSV para habilitar el borrado.'
 }
 function marcarGuardado(){guardado=true;$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
@@ -185,6 +186,13 @@ async function guardarCsv(){
 async function copiarCsv(){
   try{await navigator.clipboard.writeText(csvTxt)}catch(e){$('csv').select();document.execCommand('copy')}
   $('res').innerHTML+=' <span class="ok">CSV copiado.</span>';marcarGuardado()
+}
+async function compartirCsv(){
+  const f=new File([csvTxt],'gps-log-'+new Date().toISOString().slice(0,10)+'.csv',{type:'text/csv'});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger'});marcarGuardado()}
+    else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
+  }catch(e){if(e.name!=='AbortError')$('res').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
 }
 async function borrar(){
   if(!armado){$('bBor').textContent='Toca otra vez para CONFIRMAR el borrado';armado=setTimeout(()=>{armado=null;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'},8000);return}
@@ -210,7 +218,7 @@ async function progLora(){
   mostrarLora(await cmd('SETLORA,'+a+','+b+','+$('lInt').value.trim(),resp('LORA')))}
 async function cancelarLora(){mostrarLora(await cmd('LORAOFF',resp('LORA')))}
 $('bLP').onclick=()=>progLora().catch(e=>estado(e.message,'er'));$('bLC').onclick=()=>cancelarLora().catch(e=>estado(e.message,'er'));$('bLL').onclick=()=>leerLora().catch(e=>estado(e.message,'er'));
-$('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
+$('bSha').onclick=compartirCsv;$('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
 $('bBor').onclick=borrar;$('bGW').onclick=()=>leerVent().catch(e=>estado(e.message,'er'));$('bSW').onclick=()=>guardarVent().catch(e=>estado(e.message,'er'));
 </script>
 </body>
