@@ -44,6 +44,7 @@ progress{width:100%}
   <div>
     <button id="bGua" class="s" hidden disabled>Guardar CSV</button>
     <button id="bSha" class="s" disabled>Compartir archivo .csv</button>
+    <button id="bKml" class="s" disabled>Compartir KML (Google Earth)</button>
     <button id="bCop" class="s" disabled>Copiar CSV</button>
   </div>
   <div class="m">El borrado se habilita solo después de verificar el CRC y de guardar o copiar el CSV.</div>
@@ -75,7 +76,7 @@ const SVC='a1c20001-5b7e-4d3a-9c11-7e5f0a6b2d10',
   U=n=>'a1c2000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id), enc=new TextEncoder(), dec=new TextDecoder();
 const MOT=['movimiento','detenido','noche','inicia_mov','inicia_det','arranque'];
-let dev,chCmd,chRsp,chDat,waiters=[],dl=null,dls=null,csvTxt='',nDown=0,guardado=false,armado=null;
+let dev,chCmd,chRsp,chDat,waiters=[],dl=null,dls=null,csvTxt='',nDown=0,guardado=false,armado=null,regs=[];
 
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
@@ -159,7 +160,7 @@ async function guardarVent(){
 }
 
 async function descargar(){
-  habil(false);$('bBor').disabled=true;$('bGua').disabled=true;$('bCop').disabled=true;$('bSha').disabled=true;guardado=false;
+  habil(false);$('bBor').disabled=true;$('bGua').disabled=true;$('bCop').disabled=true;$('bSha').disabled=true;$('bKml').disabled=true;guardado=false;
   $('res').textContent='Descargando...';$('res').className='m';$('pg').hidden=false;$('pg').value=0;
   try{
     dl={seq:0,bytes:0,parts:[],end:null,total:0,last:Date.now()};
@@ -182,8 +183,9 @@ function procesar(o){
   for(let i=0;i<n;i++){const b=i*16,u=dv.getUint32(b,true),m=dv.getUint8(b+15);
     f.push([new Date(u*1000).toISOString().slice(0,19)+'Z',new Date((u-6*3600)*1000).toISOString().slice(0,19).replace('T',' '),
       (dv.getInt32(b+4,true)/1e6).toFixed(6),(dv.getInt32(b+8,true)/1e6).toFixed(6),dv.getInt16(b+12,true),dv.getUint8(b+14),m>>4,MOT[m&15]||m&15].join(','))}
+  regs=[];for(let i=0;i<n;i++){const b=i*16,m=dv.getUint8(b+15);regs.push({u:dv.getUint32(b,true),lat:dv.getInt32(b+4,true)/1e6,lon:dv.getInt32(b+8,true)/1e6,alt:dv.getInt16(b+12,true),vel:dv.getUint8(b+14),sats:m>>4,m:m&15})}
   csvTxt='utc,hora_local,lat,lon,alt_m,vel_kmh,sats,motivo\n'+f.join('\n')+'\n';nDown=o.next;
-  $('csv').value=csvTxt;$('csv').hidden=false;$('bCop').disabled=false;$('bSha').disabled=false;$('bGua').disabled=false;
+  $('csv').value=csvTxt;$('csv').hidden=false;$('bCop').disabled=false;$('bSha').disabled=false;$('bKml').disabled=false;$('bGua').disabled=false;
   $('res').innerHTML='<span class="ok">Verificado: '+n+' registros, CRC '+o.hex+' correcto.</span> Guarda o copia el CSV para habilitar el borrado.'
 }
 function marcarGuardado(){guardado=true;$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
@@ -199,6 +201,36 @@ async function compartirCsv(){
   const f=new File([csvTxt],'gps-log-'+new Date().toISOString().slice(0,10)+'.csv',{type:'text/csv'});
   try{
     if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger'});marcarGuardado()}
+    else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
+  }catch(e){if(e.name!=='AbortError')$('res').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
+}
+function generarKml(){
+  const r=Math.PI/180,n=regs.length,loc=u=>new Date((u-6*3600)*1000).toISOString().slice(0,19).replace('T',' ');
+  const dst=(a,b)=>Math.hypot((b.lat-a.lat)*111320,(b.lon-a.lon)*111320*Math.cos(a.lat*r));
+  const brg=(a,b)=>{const y=Math.sin((b.lon-a.lon)*r)*Math.cos(b.lat*r),x=Math.cos(a.lat*r)*Math.sin(b.lat*r)-Math.sin(a.lat*r)*Math.cos(b.lat*r)*Math.cos((b.lon-a.lon)*r);return(Math.atan2(y,x)/r+360)%360};
+  const ic='https://maps.google.com/mapfiles/kml/shapes/';
+  let k='<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>GPS Logger '+loc(regs[0].u).slice(0,10)+'</name>'+
+   '<Style id="ruta"><LineStyle><color>ff0000ff</color><width>4</width></LineStyle></Style>'+
+   '<Placemark><name>Recorrido</name><styleUrl>#ruta</styleUrl><LineString><tessellate>1</tessellate><altitudeMode>clampToGround</altitudeMode><coordinates>'+
+   regs.map(p=>p.lon+','+p.lat+','+p.alt).join(' ')+'</coordinates></LineString></Placemark><Folder><name>Puntos</name>';
+  regs.forEach((p,i)=>{
+    let h=null;
+    for(let j=i+1;j<n&&h==null;j++)if(dst(p,regs[j])>=20)h=brg(p,regs[j]);
+    for(let j=i-1;j>=0&&h==null;j--)if(dst(regs[j],p)>=20)h=brg(regs[j],p);
+    const flecha=h!=null&&p.m!==1&&p.m!==2&&p.m!==5,t=loc(p.u),ext=i==0||i==n-1;
+    const nom=(i==0?'Inicio ':i==n-1?'Fin ':'')+t.slice(11,16);
+    k+='<Placemark><name>'+nom+'</name><description>'+t+' | '+(MOT[p.m]||p.m)+' | '+p.vel+' km/h | '+p.sats+' sats | '+p.alt+' m</description>'+
+     '<TimeStamp><when>'+new Date(p.u*1000).toISOString().slice(0,19)+'Z</when></TimeStamp>'+
+     '<Style><IconStyle><scale>'+(flecha?0.9:0.5)+'</scale>'+(flecha?'<heading>'+h.toFixed(0)+'</heading>':'')+'<Icon><href>'+ic+(flecha?'arrow.png':'placemark_circle.png')+'</href></Icon></IconStyle><LabelStyle><scale>'+(ext?1:0)+'</scale></LabelStyle></Style>'+
+     '<Point><coordinates>'+p.lon+','+p.lat+','+p.alt+'</coordinates></Point></Placemark>';
+  });
+  return k+'</Folder></Document></kml>';
+}
+async function compartirKml(){
+  if(!regs.length)return;
+  const f=new File([generarKml()],'gps-log-'+new Date().toISOString().slice(0,10)+'.kml',{type:'application/vnd.google-earth.kml+xml'});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger KML'});marcarGuardado()}
     else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
   }catch(e){if(e.name!=='AbortError')$('res').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
 }
@@ -226,7 +258,7 @@ async function progLora(){
   mostrarLora(await cmd('SETLORA,'+a+','+b+','+$('lInt').value.trim(),resp('LORA')))}
 async function cancelarLora(){mostrarLora(await cmd('LORAOFF',resp('LORA')))}
 $('bLP').onclick=()=>progLora().catch(e=>estado(e.message,'er'));$('bLC').onclick=()=>cancelarLora().catch(e=>estado(e.message,'er'));$('bLL').onclick=()=>leerLora().catch(e=>estado(e.message,'er'));
-$('bSha').onclick=compartirCsv;$('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
+$('bSha').onclick=compartirCsv;$('bKml').onclick=compartirKml;$('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
 $('bBor').onclick=borrar;$('bGW').onclick=()=>leerVent().catch(e=>estado(e.message,'er'));$('bSW').onclick=()=>guardarVent().catch(e=>estado(e.message,'er'));
 </script>
 </body>
