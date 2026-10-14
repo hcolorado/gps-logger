@@ -118,6 +118,14 @@ function chequear(){
   else dl.ok({all,next:+dl.end[1],hex})
 }
 
+async function reintentar(fn,n,ms){
+  for(let i=0;;i++){
+    try{return await fn()}
+    catch(e){
+      if(i>=n-1||!dev.gatt.connected)throw e;
+      estado('Esperando el emparejamiento: escribe el PIN en la ventana de iOS...','wn');
+      await new Promise(r=>setTimeout(r,ms))}}
+}
 async function conectar(){
   if(!navigator.bluetooth){estado('Este navegador no soporta Web Bluetooth. Abre la página en Bluefy.','er');return}
   try{
@@ -128,10 +136,10 @@ async function conectar(){
     const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
     chCmd=await s.getCharacteristic(U(2));chRsp=await s.getCharacteristic(U(3));chDat=await s.getCharacteristic(U(4));
     chRsp.addEventListener('characteristicvaluechanged',onRsp);chDat.addEventListener('characteristicvaluechanged',onDat);
-    await chRsp.startNotifications();await chDat.startNotifications();
+    await reintentar(()=>chRsp.startNotifications(),15,2000);await reintentar(()=>chDat.startNotifications(),15,2000);
     estado('Conectado a '+dev.name,'ok');habil(true);
     await info();await leerVent();await leerLora();
-  }catch(e){estado('Error: '+e.message,'er');log('ERR '+e.message)}
+  }catch(e){const m=(e&&(e.message||e.name))||String(e);estado('Error: '+m+(dev&&dev.gatt&&!dev.gatt.connected?' (si acabas de poner el PIN, toca Conectar otra vez)':''),'er');log('ERR '+m)}
 }
 async function info(){
   const p=(await cmd('INFO',resp('INFO'))).split(',');
