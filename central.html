@@ -34,7 +34,7 @@ button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}butto
 </div>
 
 <div class="c g">
-  <div><div class="m">Distancia al logger</div><div class="big" id="dist">--</div><div class="m" id="rum">Rumbo: --</div></div>
+  <div><div class="m">Distancia al vehículo</div><div class="big" id="dist">--</div><div class="m" id="rum">Rumbo: --</div></div>
   <div style="text-align:center"><span id="ar">&#9650;</span><div class="m" id="rel"></div></div>
   <div><div class="m">Señal</div><div id="sen">--</div></div>
   <div><div class="m">Último mensaje</div><div id="edad">--</div></div>
@@ -93,10 +93,10 @@ function refresh(){
   $('ar').style.transform='rotate('+rel+'deg)';
   $('rel').textContent=heading==null?'Norte arriba (sin rumbo del teléfono)':'Frente = tu dirección de marcha';
 }
-function nuevaPos(lat,lon,utc,rssi,snr){
+function nuevaPos(lat,lon,utc,rssi,snr,dir){
   lg=[lat,lon];lastMs=Date.now();track.push(lg);if(track.length>500)track.shift();
   const hl=new Date((utc-6*3600)*1000).toISOString().slice(11,19);
-  $('pos').textContent='Logger: '+lat.toFixed(6)+', '+lon.toFixed(6)+' | hora local '+hl;
+  $('pos').textContent=(dir!=null?'VEH-'+String(dir).padStart(2,'0'):'Vehículo')+': '+lat.toFixed(6)+', '+lon.toFixed(6)+' | hora local '+hl;
   const q=rssi>-90?'ok':(rssi>-110?'wn':'er');
   $('sen').innerHTML='<span class="'+q+'">'+rssi+' dBm</span> | SNR '+snr+' dB';
   refresh();
@@ -116,7 +116,7 @@ function iniciarGPS(){
 
 function onEvt(ev){
   const t=dec.decode(ev.target.value),p=t.split(',');
-  if(p[0]==='POS'){log(t);nuevaPos(+p[3],+p[4],+p[2],+p[5],+p[6])}
+  if(p[0]==='POS'){log(t);nuevaPos(+p[3],+p[4],+p[2],+p[5],+p[6],p[1])}
   else if(p[0]==='HB'){estado('Conectado a la central | mensajes recibidos: '+p[1],'ok')}
   else log(t);
 }
@@ -143,7 +143,7 @@ function demo(){
   const base=me||[25.6866,-100.3161];if(!me)me=base.slice();
   let p=[base[0]+0.008,base[1]+0.006],a=3.5;track=[];fit=true;$('bDemo').textContent='Detener demo';
   demoT=setInterval(()=>{a+=(Math.random()-.5)*.8;p=[p[0]+Math.cos(a)*0.0003,p[1]+Math.sin(a)*0.0003];
-    nuevaPos(p[0],p[1],Math.floor(Date.now()/1000),-60-Math.round(Math.random()*30),9+Math.round(Math.random()*2))},2000);
+    nuevaPos(p[0],p[1],Math.floor(Date.now()/1000),-60-Math.round(Math.random()*30),9+Math.round(Math.random()*2),1)},2000);
 }
 window.addEventListener('load',cargarLeaflet);
 $('bCon').onclick=conectar;$('bDemo').onclick=demo;
