@@ -27,7 +27,7 @@ progress{width:100%}
 </head>
 <body>
 <main>
-<h1>GPS Logger</h1>
+<h1 id="tit">GPS Logger</h1>
 
 <div class="c">
   <button id="bCon">Conectar</button>
@@ -68,6 +68,13 @@ progress{width:100%}
   <div class="m">Hora local de la placa (UTC-6). Si el fin ya pasó hoy, se programa para mañana. Al terminar, el LoRa se apaga solo.</div>
 </div>
 
+<div class="c">
+  <h2>Nombre del vehículo</h2>
+  <div class="row"><input id="idNum" inputmode="numeric" placeholder="Número de 1 a 99"><button id="bId" class="s" disabled>Asignar nombre</button></div>
+  <div id="idEst" class="m"></div>
+  <div class="m">Cambia el nombre Bluetooth (VEH-NN) y la dirección LoRa del equipo. Se reinicia al terminar: vuelve a conectar.</div>
+</div>
+
 <div class="c"><h2>Registro</h2><div id="log"></div></div>
 </main>
 
@@ -76,11 +83,12 @@ const SVC='a1c20001-5b7e-4d3a-9c11-7e5f0a6b2d10',
   U=n=>'a1c2000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id), enc=new TextEncoder(), dec=new TextDecoder();
 const MOT=['movimiento','detenido','noche','inicia_mov','inicia_det','arranque'];
+const nombreArchivo=()=>((dev&&dev.name)||'logger')+'_'+new Date().toISOString().slice(0,10);
 let dev,chCmd,chRsp,chDat,waiters=[],dl=null,dls=null,csvTxt='',nDown=0,guardado=false,armado=null,regs=[];
 
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
-const habil=on=>['bDes','bGW','bSW','bLP','bLC','bLL'].forEach(i=>$(i).disabled=!on);
+const habil=on=>['bDes','bGW','bSW','bLP','bLC','bLL','bId'].forEach(i=>$(i).disabled=!on);
 
 // CRC32 (igual al del firmware)
 const T=new Uint32Array(256).map((_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;return c>>>0});
@@ -131,15 +139,15 @@ async function conectar(){
   if(!navigator.bluetooth){estado('Este navegador no soporta Web Bluetooth. Abre la página en Bluefy.','er');return}
   try{
     estado('Buscando...');
-    dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'GPS-Logger'}],optionalServices:[SVC]});
+    dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'VEH-'},{namePrefix:'GPS-Logger'}],optionalServices:[SVC]});
     dev.addEventListener('gattserverdisconnected',()=>{estado('Desconectado');habil(false);waiters.forEach(w=>clearTimeout(w.t));waiters=[]});
     estado('Conectando (si iOS pide el PIN, escríbelo)...');
     const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
     chCmd=await s.getCharacteristic(U(2));chRsp=await s.getCharacteristic(U(3));chDat=await s.getCharacteristic(U(4));
     chRsp.addEventListener('characteristicvaluechanged',onRsp);chDat.addEventListener('characteristicvaluechanged',onDat);
     await reintentar(()=>chRsp.startNotifications(),15,2000);await reintentar(()=>chDat.startNotifications(),15,2000);
-    estado('Conectado a '+dev.name,'ok');habil(true);
-    await info();await leerVent();await leerLora();
+    estado('Conectado a '+dev.name,'ok');$('tit').textContent=dev.name;document.title=dev.name+' - GPS Logger';habil(true);
+    await info();await leerVent();await leerLora();await leerId();
   }catch(e){const m=(e&&(e.message||e.name))||String(e);estado('Error: '+m+(dev&&dev.gatt&&!dev.gatt.connected?' (si acabas de poner el PIN, toca Conectar otra vez)':''),'er');log('ERR '+m)}
 }
 async function info(){
@@ -190,7 +198,7 @@ function procesar(o){
 }
 function marcarGuardado(){guardado=true;$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
 async function guardarCsv(){
-  try{const r=await dls.save({filename:'gps-log-'+new Date().toISOString().slice(0,10)+'.csv',data:csvTxt});if(r.status)marcarGuardado()}
+  try{const r=await dls.save({filename:nombreArchivo()+'.csv',data:csvTxt});if(r.status)marcarGuardado()}
   catch(e){if(e.code!=='declined')$('res').textContent='No se pudo guardar: '+(e.message||e.code)}
 }
 async function copiarCsv(){
@@ -198,7 +206,7 @@ async function copiarCsv(){
   $('res').innerHTML+=' <span class="ok">CSV copiado.</span>';marcarGuardado()
 }
 async function compartirCsv(){
-  const f=new File([csvTxt],'gps-log-'+new Date().toISOString().slice(0,10)+'.csv',{type:'text/csv'});
+  const f=new File([csvTxt],nombreArchivo()+'.csv',{type:'text/csv'});
   try{
     if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger'});marcarGuardado()}
     else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
@@ -209,7 +217,7 @@ function generarKml(){
   const dst=(a,b)=>Math.hypot((b.lat-a.lat)*111320,(b.lon-a.lon)*111320*Math.cos(a.lat*r));
   const brg=(a,b)=>{const y=Math.sin((b.lon-a.lon)*r)*Math.cos(b.lat*r),x=Math.cos(a.lat*r)*Math.sin(b.lat*r)-Math.sin(a.lat*r)*Math.cos(b.lat*r)*Math.cos((b.lon-a.lon)*r);return(Math.atan2(y,x)/r+360)%360};
   const ic='https://maps.google.com/mapfiles/kml/shapes/';
-  let k='<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>GPS Logger '+loc(regs[0].u).slice(0,10)+'</name>'+
+  let k='<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>'+((dev&&dev.name)||'GPS Logger')+' '+loc(regs[0].u).slice(0,10)+'</name>'+
    '<Style id="ruta"><LineStyle><color>ff0000ff</color><width>4</width></LineStyle></Style>'+
    '<Placemark><name>Recorrido</name><styleUrl>#ruta</styleUrl><LineString><tessellate>1</tessellate><altitudeMode>clampToGround</altitudeMode><coordinates>'+
    regs.map(p=>p.lon+','+p.lat+','+p.alt).join(' ')+'</coordinates></LineString></Placemark><Folder><name>Puntos</name>';
@@ -229,7 +237,7 @@ function generarKml(){
 }
 async function compartirKml(){
   if(!regs.length)return;
-  const f=new File([generarKml()],'gps-log-'+new Date().toISOString().slice(0,10)+'.kml',{type:'application/vnd.google-earth.kml+xml'});
+  const f=new File([generarKml()],nombreArchivo()+'.kml',{type:'application/vnd.google-earth.kml+xml'});
   try{
     if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger KML'});marcarGuardado()}
     else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
@@ -248,6 +256,23 @@ const fmtL=u=>new Date((u-6*3600)*1000).toISOString().slice(0,16).replace('T',' 
 function mostrarLora(t){const p=t.split(',');
   if(p[0]!=='LORA'){$('lEst').textContent='No válido: '+t+' (revisa horas hhmm e intervalo de 10 a 3600 s)';return}
   $('lEst').textContent=p[4]==='off'?'Sin programar (LoRa apagado).':'Estado: '+(p[4]==='activo'?'ACTIVO':'programado')+' | '+fmtL(+p[1])+' a '+fmtL(+p[2])+' | cada '+p[3]+' s'}
+let idArm=null;
+async function leerId(){
+  const p=(await cmd('GETID',resp('ID'))).split(',');
+  if(p[0]==='ID')$('idNum').value=p[1];
+}
+async function cambiarId(){
+  const n=parseInt($('idNum').value,10);
+  if(!(n>=1&&n<=99)){$('idEst').textContent='Escribe un número de 1 a 99';return}
+  const nom='VEH-'+String(n).padStart(2,'0');
+  if(!idArm){
+    $('bId').textContent='Toca otra vez para asignar '+nom;
+    idArm=setTimeout(()=>{idArm=null;$('bId').textContent='Asignar nombre'},8000);return}
+  clearTimeout(idArm);idArm=null;$('bId').textContent='Asignar nombre';
+  const r=await cmd('SETID,'+n,resp('ID'),8000);
+  const p=r.split(',');
+  $('idEst').innerHTML=p[0]==='ID'?'Listo: <b>'+p[2]+'</b>'+(p[3]==='lora_ok'?' (dirección LoRa '+n+' asignada).':' <span class="wn">pero el módulo LoRa no respondió: revisa la dirección LoRa.</span>')+' El equipo se reinicia; vuelve a conectar.':'<span class="er">Error: '+r+'</span>';
+}
 async function leerLora(){mostrarLora(await cmd('GETLORA',resp('LORA')))}
 async function progLora(){
   const hm=v=>{v=v.trim().padStart(4,'0');return[+v.slice(0,2),+v.slice(2)]};
@@ -259,7 +284,7 @@ async function progLora(){
   mostrarLora(await cmd('SETLORA,'+a+','+b+','+$('lInt').value.trim(),resp('LORA')))}
 async function cancelarLora(){mostrarLora(await cmd('LORAOFF',resp('LORA')))}
 $('bLP').onclick=()=>progLora().catch(e=>estado(e.message,'er'));$('bLC').onclick=()=>cancelarLora().catch(e=>estado(e.message,'er'));$('bLL').onclick=()=>leerLora().catch(e=>estado(e.message,'er'));
-$('bSha').onclick=compartirCsv;$('bKml').onclick=compartirKml;$('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
+$('bId').onclick=()=>cambiarId().catch(e=>estado(e.message,'er'));$('bSha').onclick=compartirCsv;$('bKml').onclick=compartirKml;$('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
 $('bBor').onclick=borrar;$('bGW').onclick=()=>leerVent().catch(e=>estado(e.message,'er'));$('bSW').onclick=()=>guardarVent().catch(e=>estado(e.message,'er'));
 </script>
 </body>
