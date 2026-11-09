@@ -69,6 +69,16 @@ progress{width:100%}
 </div>
 
 <div class="c">
+  <h2>Batería</h2>
+  <div id="batTxt" class="m">Conecta para ver el voltaje.</div>
+  <button id="bBat" class="s" disabled>Descargar bitácora de batería</button>
+  <button id="bBatSha" class="s" disabled>Compartir CSV de batería</button>
+  <button id="bBatBor" class="d" disabled>Borrar bitácora</button>
+  <div id="batRes" class="m"></div>
+  <div class="m">El equipo anota el voltaje cada 30 min (con hora del GPS). Borra la bitácora antes de empezar una prueba de duración nueva.</div>
+</div>
+
+<div class="c">
   <h2>Nombre del vehículo</h2>
   <div class="row"><input id="idNum" inputmode="numeric" placeholder="Número de 1 a 99"><button id="bId" class="s" disabled>Asignar nombre</button></div>
   <div id="idEst" class="m"></div>
@@ -88,7 +98,7 @@ let dev,chCmd,chRsp,chDat,waiters=[],dl=null,dls=null,csvTxt='',nDown=0,guardado
 
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
-const habil=on=>['bDes','bGW','bSW','bLP','bLC','bLL','bId'].forEach(i=>$(i).disabled=!on);
+const habil=on=>['bDes','bGW','bSW','bLP','bLC','bLL','bId','bBat','bBatBor'].forEach(i=>$(i).disabled=!on);
 
 // CRC32 (igual al del firmware)
 const T=new Uint32Array(256).map((_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;return c>>>0});
@@ -154,7 +164,8 @@ async function info(){
   const p=(await cmd('INFO',resp('INFO'))).split(',');
   if(p[0]!=='INFO')return;
   const loc=+p[3]?new Date((+p[3]-6*3600)*1000).toISOString().slice(0,16).replace('T',' '):'sin hora';
-  $('inf').textContent='Registros en placa: '+p[1]+' | Flash libre: '+Math.round(p[2]/1024)+' KB | Hora placa: '+loc+' | '+(p[4]==='mov'?'en movimiento':'detenido')+' | Fix GPS: '+(p[5]==='1'?'sí':'no')+' | FW '+p[6]
+  $('inf').textContent='Registros en placa: '+p[1]+' | Flash libre: '+Math.round(p[2]/1024)+' KB | Hora placa: '+loc+' | '+(p[4]==='mov'?'en movimiento':'detenido')+' | Fix GPS: '+(p[5]==='1'?'sí':'no')+' | FW '+p[6];
+  if(p[7]!==undefined){const t=textoBat(+p[7]);$('inf').insertAdjacentHTML('beforeend',' | '+t);$('batTxt').innerHTML=t}
 }
 async function leerVent(){
   const p=(await cmd('GETWIN',resp('WIN'))).split(',');
@@ -269,9 +280,10 @@ async function cambiarId(){
     $('bId').textContent='Toca otra vez para asignar '+nom;
     idArm=setTimeout(()=>{idArm=null;$('bId').textContent='Asignar nombre'},8000);return}
   clearTimeout(idArm);idArm=null;$('bId').textContent='Asignar nombre';
-  const r=await cmd('SETID,'+n,resp('ID'),8000);
+  const r=await cmd('SETID,'+n,resp('ID'),20000);
   const p=r.split(',');
-  $('idEst').innerHTML=p[0]==='ID'?'Listo: <b>'+p[2]+'</b>'+(p[3]==='lora_ok'?' (dirección LoRa '+n+' asignada).':' <span class="wn">pero el módulo LoRa no respondió: revisa la dirección LoRa.</span>')+' El equipo se reinicia; vuelve a conectar.':'<span class="er">Error: '+r+'</span>';
+  const E={lora_sin_resp:'el módulo LoRa no contesta: revisa que esté a 9600 baudios, el cableado RX/TX y su alimentación',lora_dir:'el módulo LoRa no guardó la dirección',lora_red:'el módulo LoRa no guardó la red 6'};
+  $('idEst').innerHTML=p[0]==='ID'?'Listo: <b>'+p[2]+'</b>'+(p[3]==='lora_ok'?' (dirección LoRa '+n+' y red 6 verificadas en el módulo).':' <span class="wn">pero '+(E[p[3]]||'el módulo LoRa no respondió ('+p[3]+')')+'.</span>')+' El equipo se reinicia; vuelve a conectar. Si el iPhone sigue mostrando el nombre anterior, apaga y enciende el Bluetooth.':'<span class="er">Error: '+r+'</span>';
 }
 async function leerLora(){mostrarLora(await cmd('GETLORA',resp('LORA')))}
 async function progLora(){
@@ -286,6 +298,50 @@ async function cancelarLora(){mostrarLora(await cmd('LORAOFF',resp('LORA')))}
 $('bLP').onclick=()=>progLora().catch(e=>estado(e.message,'er'));$('bLC').onclick=()=>cancelarLora().catch(e=>estado(e.message,'er'));$('bLL').onclick=()=>leerLora().catch(e=>estado(e.message,'er'));
 $('bId').onclick=()=>cambiarId().catch(e=>estado(e.message,'er'));$('bSha').onclick=compartirCsv;$('bKml').onclick=compartirKml;$('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
 $('bBor').onclick=borrar;$('bGW').onclick=()=>leerVent().catch(e=>estado(e.message,'er'));$('bSW').onclick=()=>guardarVent().catch(e=>estado(e.message,'er'));
+
+// ---- Batería: porcentaje aproximado (celdas 18650 con poca carga); ajusta la tabla con tu propia curva de descarga
+const PCT=[[4.20,100],[4.10,92],[4.00,82],[3.90,70],[3.80,55],[3.70,38],[3.60,22],[3.50,12],[3.40,6],[3.30,3],[3.00,0]];
+const pct=v=>{if(v>=PCT[0][0])return 100;for(let i=1;i<PCT.length;i++)if(v>=PCT[i][0]){const a=PCT[i-1],b=PCT[i];return Math.round(b[1]+(a[1]-b[1])*(v-b[0])/(a[0]-b[0]))}return 0};
+function textoBat(mv){
+  if(!(mv>=2000))return '<span class="m">Batería: sin medición (divisor no conectado)</span>';
+  const v=mv/1000,c=v<3.5?'er':v<3.7?'wn':'ok';
+  return '<span class="'+c+'">Batería: '+v.toFixed(2)+' V (~'+pct(v)+'%)'+(v<3.5?' — BAJA':'')+'</span>'}
+let batCsv='',batArm=null;
+async function descargarBat(){
+  habil(false);$('bBatSha').disabled=true;$('batRes').className='m';
+  try{
+    const f=[];let desde=0,total=1;
+    while(desde<total){
+      const r=(await cmd('GETBAT,'+desde,resp('BAT'),8000)).split(',');
+      if(r[0]!=='BAT')throw new Error(r.join(','));
+      total=+r[1];const n=+r[3];
+      if(+r[2]!==desde||!(n>0))break;
+      (r[4]||'').split(';').filter(Boolean).forEach(e=>{const[m,v]=e.split(':');f.push([m*60,+v])});
+      desde+=n;$('batRes').textContent='Descargando '+desde+' de '+total+'...'}
+    if(!f.length){$('batRes').textContent='La bitácora está vacía (se anota solo con hora GPS y divisor conectado).';return}
+    const L=u=>new Date((u-6*3600)*1000).toISOString().slice(0,19).replace('T',' ');
+    batCsv='utc,hora_local,mV,pct\n'+f.map(([u,v])=>[new Date(u*1000).toISOString().slice(0,19)+'Z',L(u),v,pct(v/1000)].join(',')).join('\n')+'\n';
+    const a=f[0],b=f[f.length-1],h=(b[0]-a[0])/3600;
+    $('batRes').innerHTML='<span class="ok">'+f.length+' anotaciones</span> del '+L(a[0]).slice(0,16)+' al '+L(b[0]).slice(0,16)+' | de '+(a[1]/1000).toFixed(2)+' V a '+(b[1]/1000).toFixed(2)+' V'+(h>=1?' | ritmo ~'+Math.round((a[1]-b[1])/h)+' mV/h':'');
+    $('bBatSha').disabled=false;
+  }catch(e){$('batRes').textContent='Falló: '+e.message;$('batRes').className='er'}
+  finally{habil(!!(dev&&dev.gatt.connected))}
+}
+async function compartirBat(){
+  const f=new File([batCsv],nombreArchivo()+'_bateria.csv',{type:'text/csv'});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],title:'Batería GPS Logger'});
+    else $('batRes').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos.</span>'
+  }catch(e){if(e.name!=='AbortError')$('batRes').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
+}
+async function borrarBat(){
+  if(!batArm){$('bBatBor').textContent='Toca otra vez para borrar la bitácora';batArm=setTimeout(()=>{batArm=null;$('bBatBor').textContent='Borrar bitácora'},8000);return}
+  clearTimeout(batArm);batArm=null;$('bBatBor').textContent='Borrar bitácora';
+  const r=await cmd('DELBAT',resp('DELBAT'));
+  $('batRes').className='m';$('batRes').textContent=r.startsWith('DELBAT,OK')?'Bitácora borrada.':'Error: '+r;
+  batCsv='';$('bBatSha').disabled=true;
+}
+$('bBat').onclick=()=>descargarBat();$('bBatSha').onclick=compartirBat;$('bBatBor').onclick=()=>borrarBat().catch(e=>estado(e.message,'er'));
 </script>
 </body>
 </html>
