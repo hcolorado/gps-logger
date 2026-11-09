@@ -21,6 +21,7 @@ button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}butto
 .big{font-size:38px;font-weight:700;line-height:1.1}
 #ar{font-size:54px;line-height:1;display:inline-block;transition:transform .4s;color:var(--ac)}
 #map{height:46vh;min-height:260px;border-radius:12px;border:1px solid var(--bd)}
+#chips button{margin:2px 6px 2px 0;padding:6px 10px;font-size:14px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;border:1px solid #fff}
 #log{font:12px/1.3 ui-monospace,Menlo,monospace;color:var(--mut);max-height:90px;overflow:auto;white-space:pre-wrap}
 </style>
 </head>
@@ -33,8 +34,10 @@ button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}butto
   <div id="est" class="m">Desconectado</div>
 </div>
 
+<div class="c" id="chips">Sin vehículos todavía</div>
+
 <div class="c g">
-  <div><div class="m">Distancia al vehículo</div><div class="big" id="dist">--</div><div class="m" id="rum">Rumbo: --</div></div>
+  <div><div class="m" id="vsel">Distancia al vehículo</div><div class="big" id="dist">--</div><div class="m" id="rum">Rumbo: --</div></div>
   <div style="text-align:center"><span id="ar">&#9650;</span><div class="m" id="rel"></div></div>
   <div><div class="m">Señal</div><div id="sen">--</div></div>
   <div><div class="m">Último mensaje</div><div id="edad">--</div></div>
@@ -42,7 +45,7 @@ button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}butto
 
 <div id="map"></div>
 <div class="m" id="nomap" hidden>Sin mapa (no hay internet o no cargó). La distancia y el rumbo siguen funcionando.</div>
-<div class="c" style="margin-top:10px"><div class="m" id="pos">Logger: --</div><div class="m" id="yo">Tu posición: esperando GPS del teléfono...</div></div>
+<div class="c" style="margin-top:10px"><div class="m" id="pos">Vehículo: --</div><div class="m" id="yo">Tu posición: esperando GPS del teléfono...</div></div>
 <div class="c"><div id="log"></div></div>
 </main>
 
@@ -50,21 +53,42 @@ button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}butto
 const SVC='a1c30001-5b7e-4d3a-9c11-7e5f0a6b2d10',U=n=>'a1c3000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id),enc=new TextEncoder(),dec=new TextDecoder();
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,CARD=['N','NE','E','SE','S','SO','O','NO'];
-let dev,chC,chE,me=null,lg=null,heading=null,lastMs=0,demoT=null,gpsOn=false,track=[],map=null,mMe,mLg,line,fit=true;
+const COL=['#e5484d','#f5a623','#2fb344','#8e44ad','#00a8b5','#d6409f','#8d6e00','#5b6470'];
+let dev,chC,chE,me=null,heading=null,demoT=null,gpsOn=false,map=null,mMe,fit=true,V={},sel=null,auto=true;
 
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
+const nom=d=>d?'VEH-'+String(d).padStart(2,'0'):'Vehículo';
 const dist=(a,b,c,d)=>{const p=rad(c-a),q=rad(d-b),x=Math.sin(p/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(q/2)**2;return 2*R*Math.asin(Math.sqrt(x))};
 const brg=(a,b,c,d)=>{const y=Math.sin(rad(d-b))*Math.cos(rad(c)),x=Math.cos(rad(a))*Math.sin(rad(c))-Math.sin(rad(a))*Math.cos(rad(c))*Math.cos(rad(d-b));return(deg(Math.atan2(y,x))+360)%360};
 const fmtD=m=>m<1000?Math.round(m)+' m':(m/1000).toFixed(2)+' km';
+const edadS=o=>Math.max(0,Math.round((Date.now()-o.ms)/1000));
+const fmtE=s=>s<120?s+' s':s<7200?Math.round(s/60)+' min':Math.round(s/3600)+' h';
+
+// ---- un registro por vehiculo (clave = direccion LoRa = numero VEH-NN)
+function veh(d){
+  if(V[d])return V[d];
+  const o={d,col:COL[((d||1)-1)%8],pos:null,track:[],ms:0,rssi:null,snr:null,utc:0};
+  if(map)capas(o);
+  return V[d]=o;
+}
+function capas(o){
+  o.ln=L.polyline([],{color:o.col,weight:3}).addTo(map);
+  o.mk=L.circleMarker([0,0],{radius:8,color:'#fff',weight:2,fillColor:o.col,fillOpacity:1});
+  o.mk.bindTooltip(nom(o.d),{permanent:true,direction:'top',offset:[0,-8]});
+}
+function limpiar(){
+  Object.values(V).forEach(o=>{if(o.mk)o.mk.remove();if(o.ln)o.ln.remove()});
+  V={};sel=null;auto=true;fit=true;
+}
 
 function iniciarMapa(){
   if(map||!window.L)return;
-  map=L.map('map').setView(lg||me||[25.6866,-100.3161],12);
+  const p=Object.values(V).find(o=>o.pos);
+  map=L.map('map').setView((p&&p.pos)||me||[25.6866,-100.3161],12);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
-  line=L.polyline([],{color:'#e5484d',weight:3}).addTo(map);
   mMe=L.circleMarker([0,0],{radius:8,color:'#fff',weight:2,fillColor:'#2f80ed',fillOpacity:1});
-  mLg=L.circleMarker([0,0],{radius:10,color:'#fff',weight:2,fillColor:'#e5484d',fillOpacity:1});
+  Object.values(V).forEach(capas);
   $('map').hidden=false;$('nomap').hidden=true;fit=true;refresh();
 }
 function sinMapa(){if(!map){$('map').hidden=true;$('nomap').hidden=false}}
@@ -78,15 +102,41 @@ function cargarLeaflet(){
   document.head.appendChild(sc);
 }
 
+function chips(){
+  const vs=Object.values(V).filter(o=>o.pos).sort((a,b)=>a.d-b.d);
+  if(!vs.length){$('chips').textContent='Sin vehículos todavía';return}
+  let s='';
+  if(vs.length>1)s+='<button data-d="auto" class="'+(auto?'':'s')+'">Auto</button>';
+  vs.forEach(o=>{s+='<button data-d="'+o.d+'" class="'+(o.d===sel?'':'s')+'"><span class="dot" style="background:'+o.col+'"></span>'+nom(o.d)+' · '+fmtE(edadS(o))+'</button>'});
+  $('chips').innerHTML=s;
+}
+$('chips').onclick=e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.d==='auto'){auto=true;const u=Object.values(V).filter(o=>o.pos).sort((a,c)=>c.ms-a.ms)[0];if(u)sel=u.d}
+  else{auto=false;sel=+b.dataset.d}
+  refresh();
+};
+
 function refresh(){
+  const vs=Object.values(V).filter(o=>o.pos);
   if(map){
     if(me){mMe.setLatLng(me);if(!map.hasLayer(mMe))mMe.addTo(map)}
-    if(lg){mLg.setLatLng(lg);if(!map.hasLayer(mLg))mLg.addTo(map);line.setLatLngs(track)}
-    if(fit&&me&&lg){map.fitBounds([me,lg],{padding:[40,40],maxZoom:17});fit=false}
-    else if(fit&&lg){map.setView(lg,16);fit=false}
+    vs.forEach(o=>{o.mk.setLatLng(o.pos);if(!map.hasLayer(o.mk))o.mk.addTo(map);o.ln.setLatLngs(o.track);o.mk.setRadius(o.d===sel?11:8);if(o.d===sel)o.mk.bringToFront()});
+    if(fit&&vs.length){
+      const pts=vs.map(o=>o.pos);if(me)pts.push(me);
+      if(pts.length>1)map.fitBounds(pts,{padding:[40,40],maxZoom:17});else map.setView(pts[0],16);
+      fit=false}
   }
-  if(!me||!lg)return;
-  const d=dist(me[0],me[1],lg[0],lg[1]),b=brg(me[0],me[1],lg[0],lg[1]);
+  chips();
+  const o=V[sel];
+  if(!o||!o.pos)return;
+  $('vsel').textContent='Distancia a '+nom(o.d);
+  const hl=new Date((o.utc-6*3600)*1000).toISOString().slice(11,19);
+  $('pos').textContent=nom(o.d)+': '+o.pos[0].toFixed(6)+', '+o.pos[1].toFixed(6)+' | hora local '+hl;
+  const q=o.rssi>-90?'ok':(o.rssi>-110?'wn':'er');
+  $('sen').innerHTML='<span class="'+q+'">'+o.rssi+' dBm</span> | SNR '+o.snr+' dB';
+  if(!me)return;
+  const d=dist(me[0],me[1],o.pos[0],o.pos[1]),b=brg(me[0],me[1],o.pos[0],o.pos[1]);
   $('dist').textContent=fmtD(d);
   $('rum').textContent='Rumbo: '+Math.round(b)+'° '+CARD[Math.round(b/45)%8];
   const rel=heading==null?b:(b-heading+360)%360;
@@ -94,15 +144,22 @@ function refresh(){
   $('rel').textContent=heading==null?'Norte arriba (sin rumbo del teléfono)':'Frente = tu dirección de marcha';
 }
 function nuevaPos(lat,lon,utc,rssi,snr,dir){
-  lg=[lat,lon];lastMs=Date.now();track.push(lg);if(track.length>500)track.shift();
-  const hl=new Date((utc-6*3600)*1000).toISOString().slice(11,19);
-  $('pos').textContent=(dir!=null?'VEH-'+String(dir).padStart(2,'0'):'Vehículo')+': '+lat.toFixed(6)+', '+lon.toFixed(6)+' | hora local '+hl;
-  const q=rssi>-90?'ok':(rssi>-110?'wn':'er');
-  $('sen').innerHTML='<span class="'+q+'">'+rssi+' dBm</span> | SNR '+snr+' dB';
+  const d=+dir||0,o=veh(d);
+  o.pos=[lat,lon];o.utc=utc;o.rssi=rssi;o.snr=snr;
+  // la hora del mensaje manda: una posicion reenviada por LAST no debe verse como "hace 0 s"
+  o.ms=Math.min(Date.now(),utc*1000);
+  const ult=o.track[o.track.length-1];
+  if(!ult||ult[0]!==lat||ult[1]!==lon)o.track.push(o.pos);
+  if(o.track.length>500)o.track.shift();
+  if(auto||sel==null||!V[sel]){const u=Object.values(V).filter(x=>x.pos).sort((a,b)=>b.ms-a.ms)[0];sel=u?u.d:d}
   refresh();
 }
-setInterval(()=>{if(!lastMs){$('edad').textContent='--';return}
-  const s=Math.round((Date.now()-lastMs)/1000);$('edad').innerHTML='<span class="'+(s>90?'wn':'ok')+'">hace '+s+' s</span>'},1000);
+setInterval(()=>{
+  const o=V[sel];
+  if(o&&o.pos){const s=edadS(o);$('edad').innerHTML='<span class="'+(s>90?'wn':'ok')+'">hace '+fmtE(s)+'</span>'}else $('edad').textContent='--';
+  Object.values(V).forEach(x=>{if(x.mk)x.mk.setStyle({fillOpacity:x.pos&&edadS(x)>300?0.4:1})});
+  chips();
+},1000);
 
 function iniciarGPS(){
   if(gpsOn||!navigator.geolocation)return;gpsOn=true;
@@ -133,7 +190,7 @@ async function conectar(){
     await chC.writeValueWithResponse(enc.encode('INFO'));      // obliga a completar el emparejamiento
     chE.addEventListener('characteristicvaluechanged',onEvt);
     await chE.startNotifications();
-    await chC.writeValueWithResponse(enc.encode('LAST'));
+    await chC.writeValueWithResponse(enc.encode('LAST'));      // la central responde con la ultima posicion de cada vehiculo
     estado('Conectado a '+dev.name,'ok');
   }catch(e){estado('Error: '+e.message,'er');log('ERR '+e.message)}
 }
@@ -141,9 +198,11 @@ function demo(){
   if(demoT){clearInterval(demoT);demoT=null;$('bDemo').textContent='Demo';return}
   iniciarGPS();
   const base=me||[25.6866,-100.3161];if(!me)me=base.slice();
-  let p=[base[0]+0.008,base[1]+0.006],a=3.5;track=[];fit=true;$('bDemo').textContent='Detener demo';
-  demoT=setInterval(()=>{a+=(Math.random()-.5)*.8;p=[p[0]+Math.cos(a)*0.0003,p[1]+Math.sin(a)*0.0003];
-    nuevaPos(p[0],p[1],Math.floor(Date.now()/1000),-60-Math.round(Math.random()*30),9+Math.round(Math.random()*2),1)},2000);
+  limpiar();$('bDemo').textContent='Detener demo';
+  const S=[1,2,3].map(i=>({d:i,p:[base[0]+0.008*i*(i%2?1:-1),base[1]+0.006*i],a:i*2}));
+  demoT=setInterval(()=>{S.forEach(s=>{
+    s.a+=(Math.random()-.5)*.8;s.p=[s.p[0]+Math.cos(s.a)*0.0003,s.p[1]+Math.sin(s.a)*0.0003];
+    nuevaPos(s.p[0],s.p[1],Math.floor(Date.now()/1000),-60-Math.round(Math.random()*30),9+Math.round(Math.random()*2),s.d)})},2000);
 }
 window.addEventListener('load',cargarLeaflet);
 $('bCon').onclick=conectar;$('bDemo').onclick=demo;
