@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<!-- Pagina del logger, version 1.4 (15-nov-2026). Historial: 1.0 descarga, CSV, KML, ventanas, LoRa; 1.1 nombre VEH-NN;
+     1.2 mensajes detallados de SETID; 1.3 tarjeta de bateria y bitacora; 1.4 motivos 'descartado' y 'salto', contador de
+     descartes y version visible. Recomendada con firmware 2.4. -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>GPS Logger - Descarga BLE</title>
@@ -28,6 +31,7 @@ progress{width:100%}
 <body>
 <main>
 <h1 id="tit">GPS Logger</h1>
+<div id="ver" class="m" style="margin:-6px 0 10px"></div>
 
 <div class="c">
   <button id="bCon">Conectar</button>
@@ -89,13 +93,15 @@ progress{width:100%}
 </main>
 
 <script>
+const PAG_VER='1.4',PAG_FECHA='15-nov-2026',FW_MIN='2.4';
 const SVC='a1c20001-5b7e-4d3a-9c11-7e5f0a6b2d10',
   U=n=>'a1c2000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id), enc=new TextEncoder(), dec=new TextDecoder();
-const MOT=['movimiento','detenido','noche','inicia_mov','inicia_det','arranque'];
+const MOT=['movimiento','detenido','noche','inicia_mov','inicia_det','arranque','descartado','salto'];
 const nombreArchivo=()=>((dev&&dev.name)||'logger')+'_'+new Date().toISOString().slice(0,10);
 let dev,chCmd,chRsp,chDat,waiters=[],dl=null,dls=null,csvTxt='',nDown=0,guardado=false,armado=null,regs=[];
 
+$('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · recomendada con firmware '+FW_MIN;
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
 const habil=on=>['bDes','bGW','bSW','bLP','bLC','bLL','bId','bBat','bBatBor'].forEach(i=>$(i).disabled=!on);
@@ -163,9 +169,11 @@ async function conectar(){
 async function info(){
   const p=(await cmd('INFO',resp('INFO'))).split(',');
   if(p[0]!=='INFO')return;
+  $('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · firmware del equipo '+p[6]+(parseFloat(p[6])<parseFloat(FW_MIN)?' — anterior a '+FW_MIN+': sin contador de descartes ni motivos nuevos':' — compatible');
   const loc=+p[3]?new Date((+p[3]-6*3600)*1000).toISOString().slice(0,16).replace('T',' '):'sin hora';
   $('inf').textContent='Registros en placa: '+p[1]+' | Flash libre: '+Math.round(p[2]/1024)+' KB | Hora placa: '+loc+' | '+(p[4]==='mov'?'en movimiento':'detenido')+' | Fix GPS: '+(p[5]==='1'?'sí':'no')+' | FW '+p[6];
   if(p[7]!==undefined){const t=textoBat(+p[7]);$('inf').insertAdjacentHTML('beforeend',' | '+t);$('batTxt').innerHTML=t}
+  if(p[8]!==undefined&&/^\d+$/.test(p[8]))$('inf').insertAdjacentText('beforeend',' | Movimientos descartados: '+p[8])
 }
 async function leerVent(){
   const p=(await cmd('GETWIN',resp('WIN'))).split(',');
@@ -237,7 +245,7 @@ function generarKml(){
     for(let j=i+1;j<n&&h==null;j++)if(dst(p,regs[j])>=20)h=brg(p,regs[j]);
     for(let j=i-1;j>=0&&h==null;j--)if(dst(regs[j],p)>=20)h=brg(regs[j],p);
     // arrow.png de Google Earth apunta hacia abajo con heading 0: se suma 180 grados
-    const flecha=h!=null&&p.m!==1&&p.m!==2&&p.m!==5,t=loc(p.u),ext=i==0||i==n-1;
+    const flecha=h!=null&&p.m!==1&&p.m!==2&&p.m!==5&&p.m!==6&&p.m!==7,t=loc(p.u),ext=i==0||i==n-1;
     const nom=(i==0?'Inicio ':i==n-1?'Fin ':'')+t.slice(11,16);
     k+='<Placemark><name>'+nom+'</name><description>'+t+' | '+(MOT[p.m]||p.m)+' | '+p.vel+' km/h | '+p.sats+' sats | '+p.alt+' m</description>'+
      '<TimeStamp><when>'+new Date(p.u*1000).toISOString().slice(0,19)+'Z</when></TimeStamp>'+
