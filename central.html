@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<!-- Pagina de la central, version 1.1 (15-nov-2026). Historial: 1.0 un solo vehiculo; 1.1 varios vehiculos (botones, marcadores
+     y recorridos por VEH-NN) y version visible. Requiere central_ble.ino 1.2 para recuperar todos los vehiculos al conectar. -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Central GPS Logger</title>
@@ -32,6 +34,7 @@ button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}butto
   <button id="bDemo" class="s">Demo</button>
   <button id="bCen" class="s">Centrar mapa</button>
   <div id="est" class="m">Desconectado</div>
+  <div id="ver" class="m"></div>
 </div>
 
 <div class="c" id="chips">Sin vehículos todavía</div>
@@ -50,12 +53,14 @@ button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}butto
 </main>
 
 <script>
+const PAG_VER='1.1',PAG_FECHA='15-nov-2026',FW_MIN='1.2';
 const SVC='a1c30001-5b7e-4d3a-9c11-7e5f0a6b2d10',U=n=>'a1c3000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id),enc=new TextEncoder(),dec=new TextDecoder();
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,CARD=['N','NE','E','SE','S','SO','O','NO'];
 const COL=['#e5484d','#f5a623','#2fb344','#8e44ad','#00a8b5','#d6409f','#8d6e00','#5b6470'];
 let dev,chC,chE,me=null,heading=null,demoT=null,gpsOn=false,map=null,mMe,fit=true,V={},sel=null,auto=true;
 
+$('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · recomendada con la central 1.2';
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
 const nom=d=>d?'VEH-'+String(d).padStart(2,'0'):'Vehículo';
@@ -174,6 +179,7 @@ function iniciarGPS(){
 function onEvt(ev){
   const t=dec.decode(ev.target.value),p=t.split(',');
   if(p[0]==='POS'){log(t);nuevaPos(+p[3],+p[4],+p[2],+p[5],+p[6],p[1])}
+  else if(p[0]==='INFO'){const fw=p[3]||'?';$('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · central '+fw+(parseFloat(fw)<parseFloat(FW_MIN)?' — anterior a '+FW_MIN+': solo mostrará el último vehículo al reconectar':' — compatible');log(t)}
   else if(p[0]==='HB'){estado('Conectado a la central | mensajes recibidos: '+p[1],'ok')}
   else log(t);
 }
@@ -190,7 +196,8 @@ async function conectar(){
     await chC.writeValueWithResponse(enc.encode('INFO'));      // obliga a completar el emparejamiento
     chE.addEventListener('characteristicvaluechanged',onEvt);
     await chE.startNotifications();
-    await chC.writeValueWithResponse(enc.encode('LAST'));      // la central responde con la ultima posicion de cada vehiculo
+    await chC.writeValueWithResponse(enc.encode('LAST'));
+    await chC.writeValueWithResponse(enc.encode('INFO'));      // ahora si llega la respuesta: version de la central      // la central responde con la ultima posicion de cada vehiculo
     estado('Conectado a '+dev.name,'ok');
   }catch(e){estado('Error: '+e.message,'er');log('ERR '+e.message)}
 }
