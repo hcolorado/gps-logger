@@ -120,6 +120,19 @@ const crc32=b=>{let c=~0;for(let i=0;i<b.length;i++)c=T[(c^b[i])&255]^(c>>>8);re
 // Capacidad de guardado (si la plataforma la ofrece)
 if(window.claude&&claude.use)claude.use('downloads').then(d=>{if(d){dls=d;$('bGua').hidden=false}}).catch(()=>{});
 
+let wakeLock=null;
+async function activarWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock=await navigator.wakeLock.request('screen');
+      log('Pantalla activa (WakeLock OK)');
+    }
+  }catch(e){log('WakeLock: '+e.message)}
+}
+document.addEventListener('visibilitychange',async()=>{
+  if(wakeLock!==null&&document.visibilityState==='visible')activarWakeLock();
+});
+
 function esperar(pred,ms){return new Promise((ok,ko)=>{
   const w={pred,ok,t:setTimeout(()=>{waiters=waiters.filter(x=>x!==w);ko(new Error('Sin respuesta de la placa'))},ms||8000)};
   waiters.push(w)})}
@@ -177,6 +190,7 @@ async function conectar(){
     chRsp.addEventListener('characteristicvaluechanged',onRsp);chDat.addEventListener('characteristicvaluechanged',onDat);
     await reintentar(()=>chRsp.startNotifications(),15,2000);await reintentar(()=>chDat.startNotifications(),15,2000);
     estado('Conectado a '+dev.name,'ok');$('tit').textContent=dev.name;document.title=dev.name+' - GPS Logger 3.0';habil(true);
+    activarWakeLock();
     if(guardado&&nDown>0){$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
     await info();await leerVent();await leerLora();await leerId();
   }catch(e){const m=(e&&(e.message||e.name))||String(e);estado('Error: '+m+(dev&&dev.gatt&&!dev.gatt.connected?' (si acabas de poner el PIN, toca Conectar otra vez)':''),'er');log('ERR '+m)}
