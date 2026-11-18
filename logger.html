@@ -65,14 +65,16 @@ progress{width:100%;height:10px;border-radius:5px;overflow:hidden}
   <progress id="pg" max="100" value="0" hidden></progress>
   <div id="res" class="m"></div>
   <textarea id="csv" readonly hidden></textarea>
-  <div>
-    <button id="bGua" class="s" hidden disabled>Guardar CSV</button>
-    <button id="bSha" class="s" disabled>Compartir archivo .csv</button>
-    <button id="bKml" class="s" disabled>Compartir KML (Google Earth)</button>
-    <button id="bCop" class="s" disabled>Copiar CSV</button>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+    <button id="bDescCsv" class="s" onclick="descargarCsv()" disabled>Descargar CSV</button>
+    <button id="bDescKml" class="s" onclick="descargarKml()" disabled>Descargar KML</button>
+    <button id="bSha" class="s" onclick="compartirCsv()" disabled>Compartir .csv</button>
+    <button id="bKml" class="s" onclick="compartirKml()" disabled>Compartir .kml</button>
+    <button id="bCop" class="s" onclick="copiarCsv()" disabled>Copiar CSV</button>
+    <button id="bGua" class="s" onclick="guardarCsv()" hidden disabled>Guardar CSV</button>
   </div>
   <div class="m" style="margin-top:8px">El borrado se habilita solo después de verificar el CRC y de guardar o copiar el CSV.</div>
-  <button id="bBor" class="d" disabled>Borrar de la placa</button>
+  <button id="bBor" class="d" onclick="borrar()" disabled>Borrar de la placa</button>
 </div>
 
 <div class="c">
@@ -95,9 +97,12 @@ progress{width:100%;height:10px;border-radius:5px;overflow:hidden}
 <div class="c">
   <h2>Batería</h2>
   <div id="batTxt" class="m">Conecta para ver el voltaje.</div>
-  <button id="bBat" class="s" disabled>Descargar bitácora de batería</button>
-  <button id="bBatSha" class="s" disabled>Compartir CSV de batería</button>
-  <button id="bBatBor" class="d" disabled>Borrar bitácora</button>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    <button id="bBat" class="s" disabled>Descargar bitácora</button>
+    <button id="bBatDesc" class="s" onclick="descargarBatBlob()" disabled>Descargar CSV</button>
+    <button id="bBatSha" class="s" disabled>Compartir CSV</button>
+    <button id="bBatBor" class="d" disabled>Borrar bitácora</button>
+  </div>
   <div id="batRes" class="m"></div>
   <div class="m" style="margin-top:6px">El equipo anota el voltaje cada 30 min (con hora del GPS). Borra la bitácora antes de empezar una prueba de duración nueva.</div>
 </div>
@@ -190,6 +195,7 @@ async function conectar(){
     chRsp.addEventListener('characteristicvaluechanged',onRsp);chDat.addEventListener('characteristicvaluechanged',onDat);
     await reintentar(()=>chRsp.startNotifications(),15,2000);await reintentar(()=>chDat.startNotifications(),15,2000);
     estado('Conectado a '+dev.name,'ok');$('tit').textContent=dev.name;document.title=dev.name+' - GPS Logger 3.0';habil(true);
+    if(guardado&&nDown>0){$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
     await info();await leerVent();await leerLora();await leerId();
   }catch(e){const m=(e&&(e.message||e.name))||String(e);estado('Error: '+m+(dev&&dev.gatt&&!dev.gatt.connected?' (si acabas de poner el PIN, toca Conectar otra vez)':''),'er');log('ERR '+m)}
 }
@@ -239,10 +245,37 @@ function procesar(o){
       (dv.getInt32(b+4,true)/1e6).toFixed(6),(dv.getInt32(b+8,true)/1e6).toFixed(6),dv.getInt16(b+12,true),dv.getUint8(b+14),m>>4,MOT[m&15]||m&15].join(','))}
   regs=[];for(let i=0;i<n;i++){const b=i*16,m=dv.getUint8(b+15);regs.push({u:dv.getUint32(b,true),lat:dv.getInt32(b+4,true)/1e6,lon:dv.getInt32(b+8,true)/1e6,alt:dv.getInt16(b+12,true),vel:dv.getUint8(b+14),sats:m>>4,m:m&15})}
   csvTxt='utc,hora_local,lat,lon,alt_m,vel_kmh,sats,motivo\n'+f.join('\n')+'\n';nDown=o.next;
-  $('csv').value=csvTxt;$('csv').hidden=false;$('bCop').disabled=false;$('bSha').disabled=false;$('bKml').disabled=false;$('bGua').disabled=false;
-  $('res').innerHTML='<span class="ok">Verificado: '+n+' registros, CRC '+o.hex+' correcto.</span> Guarda o copia el CSV para habilitar el borrado.'
+  $('csv').value=csvTxt;$('csv').hidden=false;
+  $('bDescCsv').disabled=false;$('bDescKml').disabled=false;$('bCop').disabled=false;$('bSha').disabled=false;$('bKml').disabled=false;$('bGua').disabled=false;
+  $('res').innerHTML='<span class="ok">Verificado: '+n+' registros, CRC '+o.hex+' correcto.</span> Guarda o descarga el archivo para habilitar el borrado.'
 }
 function marcarGuardado(){guardado=true;$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
+function descargarBlob(contenido, nombre, tipo){
+  const b = new Blob([contenido], {type: tipo});
+  const u = URL.createObjectURL(b);
+  const a = document.createElement('a');
+  a.href = u;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{
+    document.body.removeChild(a);
+    URL.revokeObjectURL(u);
+  }, 250);
+  marcarGuardado();
+}
+function descargarCsv(){
+  if(!csvTxt)return;
+  descargarBlob(csvTxt, nombreArchivo()+'.csv', 'text/csv;charset=utf-8;');
+}
+function descargarKml(){
+  if(!regs.length)return;
+  descargarBlob(generarKml(), nombreArchivo()+'.kml', 'application/vnd.google-earth.kml+xml');
+}
+function descargarBatBlob(){
+  if(!batCsv)return;
+  descargarBlob(batCsv, nombreArchivo()+'_bateria.csv', 'text/csv;charset=utf-8;');
+}
 async function guardarCsv(){
   try{const r=await dls.save({filename:nombreArchivo()+'.csv',data:csvTxt});if(r.status)marcarGuardado()}
   catch(e){if(e.code!=='declined')$('res').textContent='No se pudo guardar: '+(e.message||e.code)}
@@ -255,7 +288,7 @@ async function compartirCsv(){
   const f=new File([csvTxt],nombreArchivo()+'.csv',{type:'text/csv'});
   try{
     if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger'});marcarGuardado()}
-    else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
+    else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Descargar o Copiar CSV.</span>'
   }catch(e){if(e.name!=='AbortError')$('res').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
 }
 function generarKml(){
@@ -285,16 +318,20 @@ async function compartirKml(){
   const f=new File([generarKml()],nombreArchivo()+'.kml',{type:'application/vnd.google-earth.kml+xml'});
   try{
     if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger KML'});marcarGuardado()}
-    else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
+    else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Descargar KML.</span>'
   }catch(e){if(e.name!=='AbortError')$('res').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
 }
 async function borrar(){
+  if(!dev||!dev.gatt||!dev.gatt.connected){
+    $('res').innerHTML='<span class="er">La placa no está conectada. Toca "Conectar a Logger 3.0" arriba para reconectar y borrar.</span>';
+    return;
+  }
   if(!armado){$('bBor').textContent='Toca otra vez para CONFIRMAR el borrado';armado=setTimeout(()=>{armado=null;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'},8000);return}
   clearTimeout(armado);armado=null;$('bBor').disabled=true;
   try{const r=await cmd('DEL,'+nDown,resp('DEL'));
     $('res').textContent=r.startsWith('DEL,OK')?'Borrado. Registros restantes en placa: '+r.split(',')[2]:'Error al borrar: '+r;
     $('bBor').textContent='Borrar de la placa';await info()
-  }catch(e){$('res').textContent='Error al borrar: '+e.message}
+  }catch(e){$('res').textContent='Error al borrar: '+e.message;$('bBor').disabled=false}
 }
 
 const fmtL=u=>new Date((u-6*3600)*1000).toISOString().slice(0,16).replace('T',' ');
@@ -342,7 +379,11 @@ function textoBat(mv){
   return '<span class="'+c+'">Batería: '+v.toFixed(2)+' V (~'+pct(v)+'%)'+(v<3.5?' — BAJA':'')+'</span>'}
 let batCsv='',batArm=null;
 async function descargarBat(){
-  habil(false);$('bBatSha').disabled=true;$('batRes').className='m';
+  if(!dev||!dev.gatt||!dev.gatt.connected){
+    $('batRes').className='er';$('batRes').textContent='La placa no está conectada. Toca "Conectar a Logger 3.0" arriba.';
+    return;
+  }
+  habil(false);$('bBatSha').disabled=true;$('bBatDesc').disabled=true;$('batRes').className='m';
   try{
     const f=[];let desde=0,total=1;
     while(desde<total){
@@ -357,7 +398,7 @@ async function descargarBat(){
     batCsv='utc,hora_local,mV,pct\n'+f.map(([u,v])=>[new Date(u*1000).toISOString().slice(0,19)+'Z',L(u),v,pct(v/1000)].join(',')).join('\n')+'\n';
     const a=f[0],b=f[f.length-1],h=(b[0]-a[0])/3600;
     $('batRes').innerHTML='<span class="ok">'+f.length+' anotaciones</span> del '+L(a[0]).slice(0,16)+' al '+L(b[0]).slice(0,16)+' | de '+(a[1]/1000).toFixed(2)+' V a '+(b[1]/1000).toFixed(2)+' V'+(h>=1?' | ritmo ~'+Math.round((a[1]-b[1])/h)+' mV/h':'');
-    $('bBatSha').disabled=false;
+    $('bBatSha').disabled=false;$('bBatDesc').disabled=false;
   }catch(e){$('batRes').textContent='Falló: '+e.message;$('batRes').className='er'}
   finally{habil(!!(dev&&dev.gatt.connected))}
 }
