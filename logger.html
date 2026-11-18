@@ -163,6 +163,48 @@ function chequear(){
   else dl.ok({all,next:+dl.end[1],hex})
 }
 
+let pingTimer=null,reconectando=false;
+
+function iniciarPing(){
+  if(pingTimer)clearInterval(pingTimer);
+  pingTimer=setInterval(async()=>{
+    if(!dev||!dev.gatt||!dev.gatt.connected||!chCmd)return;
+    if(dl||waiters.length>0)return;
+    try{await info()}catch(e){log('Ping: '+e.message)}
+  },10000);
+}
+function detenerPing(){
+  if(pingTimer){clearInterval(pingTimer);pingTimer=null}
+}
+
+async function onDisconnect(){
+  detenerPing();habil(false);
+  waiters.forEach(w=>clearTimeout(w.t));waiters=[];
+  if(reconectando||!dev){estado('Desconectado');return}
+  reconectando=true;estado('Conexión perdida (520). Reconectando...','wn');
+  log('Conexión BLE perdida (520). Intentando reconectar...');
+  for(let i=1;i<=5;i++){
+    try{
+      await new Promise(r=>setTimeout(r,2000));
+      if(!dev)break;
+      log('Reintento '+i+'/5...');
+      const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
+      chCmd=await s.getCharacteristic(U(2));chRsp=await s.getCharacteristic(U(3));chDat=await s.getCharacteristic(U(4));
+      chRsp.addEventListener('characteristicvaluechanged',onRsp);chDat.addEventListener('characteristicvaluechanged',onDat);
+      await reintentar(()=>chRsp.startNotifications(),5,1000);
+      await reintentar(()=>chDat.startNotifications(),5,1000);
+      estado('Conectado a '+dev.name,'ok');habil(true);
+      log('Reconexión exitosa');
+      reconectando=false;
+      activarWakeLock();
+      iniciarPing();
+      return;
+    }catch(e){log('Fallo reconexión '+i+': '+e.message)}
+  }
+  reconectando=false;
+  estado('Desconectado. Toca Conectar a Logger 3.0','er');
+}
+
 async function reintentar(fn,n,ms){
   for(let i=0;;i++){
     try{return await fn()}
@@ -183,7 +225,7 @@ async function conectar(){
       ],
       optionalServices:[SVC]
     });
-    dev.addEventListener('gattserverdisconnected',()=>{estado('Desconectado');habil(false);waiters.forEach(w=>clearTimeout(w.t));waiters=[]});
+    dev.addEventListener('gattserverdisconnected',onDisconnect);
     estado('Conectando (si se solicita PIN, escribe 162638)...');
     const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
     chCmd=await s.getCharacteristic(U(2));chRsp=await s.getCharacteristic(U(3));chDat=await s.getCharacteristic(U(4));
@@ -191,6 +233,7 @@ async function conectar(){
     await reintentar(()=>chRsp.startNotifications(),15,2000);await reintentar(()=>chDat.startNotifications(),15,2000);
     estado('Conectado a '+dev.name,'ok');$('tit').textContent=dev.name;document.title=dev.name+' - GPS Logger 3.0';habil(true);
     activarWakeLock();
+    iniciarPing();
     if(guardado&&nDown>0){$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
     await info();await leerVent();await leerLora();await leerId();
   }catch(e){const m=(e&&(e.message||e.name))||String(e);estado('Error: '+m+(dev&&dev.gatt&&!dev.gatt.connected?' (si acabas de poner el PIN, toca Conectar otra vez)':''),'er');log('ERR '+m)}
