@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<!-- Página del logger, versión 1.4 (15-nov-2026). Compatible con firmware 2.4. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GPS Logger - Descarga BLE</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#14181f;--mut:#667085;--bd:#d9dde3;--ac:#0b6bcb;--ok:#18794e;--er:#c0262d;--wn:#9a6700;
+box-sizing:border-box;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101318;--card:#1a1e26;--tx:#e8ebf0;--mut:#98a2b3;--bd:#2c323d;--ac:#4aa3ff;--ok:#3ccf8e;--er:#ff6b70;--wn:#e3b341}}
+:root[data-theme="dark"]{--bg:#101318;--card:#1a1e26;--tx:#e8ebf0;--mut:#98a2b3;--bd:#2c323d;--ac:#4aa3ff;--ok:#3ccf8e;--er:#ff6b70;--wn:#e3b341}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 -apple-system,system-ui,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 12px}h2{font-size:15px;margin:0 0 8px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+button{font:inherit;border:0;border-radius:10px;padding:10px 14px;background:var(--ac);color:#fff;margin:4px 6px 4px 0;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}button.d{background:var(--er)}
+input,textarea{font:inherit;width:100%;padding:8px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+textarea{font:12px/1.3 ui-monospace,Menlo,monospace;height:140px}
+.m{color:var(--mut);font-size:14px}.ok{color:var(--ok)}.er{color:var(--er)}.wn{color:var(--wn)}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+#log{font:12px/1.3 ui-monospace,Menlo,monospace;color:var(--mut);max-height:110px;overflow:auto;white-space:pre-wrap}
+progress{width:100%}
+</style>
+</head>
+<body>
+<main>
+<h1 id="tit">GPS Logger</h1>
+<div id="ver" class="m" style="margin:-6px 0 10px"></div>
+
+<div class="c">
+  <button id="bCon">Conectar</button>
+  <span id="est" class="m">Desconectado</span>
+  <div id="inf" class="m"></div>
+</div>
+
+<div class="c">
+  <h2>Descarga de registros</h2>
+  <button id="bDes" disabled>Descargar y verificar</button>
+  <progress id="pg" max="100" value="0" hidden></progress>
+  <div id="res" class="m"></div>
+  <textarea id="csv" readonly hidden></textarea>
+  <div>
+    <button id="bGua" class="s" hidden disabled>Guardar CSV</button>
+    <button id="bSha" class="s" disabled>Compartir archivo .csv</button>
+    <button id="bKml" class="s" disabled>Compartir KML (Google Earth)</button>
+    <button id="bCop" class="s" disabled>Copiar CSV</button>
+  </div>
+  <div class="m" style="margin-top:8px">El borrado se habilita solo después de verificar el CRC y de guardar o copiar el CSV.</div>
+  <button id="bBor" class="d" disabled>Borrar de la placa</button>
+</div>
+
+<div class="c">
+  <h2>Ventanas de descarga (hora local)</h2>
+  <div class="row"><input id="wDur" inputmode="numeric" placeholder="Duración (min)"><input id="wHor" placeholder="Inicios: 1100,1700,2100"></div>
+  <button id="bGW" class="s" disabled>Leer</button>
+  <button id="bSW" disabled>Guardar ventanas</button>
+</div>
+
+<div class="c">
+  <h2>Seguimiento LoRa (un solo periodo)</h2>
+  <div class="row"><input id="lIni" inputmode="numeric" placeholder="Inicio hhmm"><input id="lFin" inputmode="numeric" placeholder="Fin hhmm"><input id="lInt" inputmode="numeric" placeholder="Cada (s)" value="30"></div>
+  <button id="bLP" disabled>Programar</button>
+  <button id="bLC" class="s" disabled>Cancelar</button>
+  <button id="bLL" class="s" disabled>Leer</button>
+  <div id="lEst" class="m"></div>
+  <div class="m" style="margin-top:6px">Hora local de la placa (UTC-6). Si el fin ya pasó hoy, se programa para mañana. Al terminar, el LoRa se apaga solo.</div>
+</div>
+
+<div class="c">
+  <h2>Batería</h2>
+  <div id="batTxt" class="m">Conecta para ver el voltaje.</div>
+  <button id="bBat" class="s" disabled>Descargar bitácora de batería</button>
+  <button id="bBatSha" class="s" disabled>Compartir CSV de batería</button>
+  <button id="bBatBor" class="d" disabled>Borrar bitácora</button>
+  <div id="batRes" class="m"></div>
+  <div class="m" style="margin-top:6px">El equipo anota el voltaje cada 30 min (con hora del GPS). Borra la bitácora antes de empezar una prueba de duración nueva.</div>
+</div>
+
+<div class="c">
+  <h2>Nombre del vehículo</h2>
+  <div class="row"><input id="idNum" inputmode="numeric" placeholder="Número de 1 a 99"><button id="bId" class="s" disabled>Asignar nombre</button></div>
+  <div id="idEst" class="m"></div>
+  <div class="m" style="margin-top:6px">Cambia el nombre Bluetooth (VEH-NN) y la dirección LoRa del equipo. Se reinicia al terminar: vuelve a conectar.</div>
+</div>
+
+<div class="c"><h2>Registro de Eventos</h2><div id="log"></div></div>
+</main>
+
+<script>
+const PAG_VER='1.4',PAG_FECHA='15-nov-2026',FW_MIN='2.4';
+const SVC='a1c20001-5b7e-4d3a-9c11-7e5f0a6b2d10',
+  U=n=>'a1c2000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
+const $=id=>document.getElementById(id), enc=new TextEncoder(), dec=new TextDecoder();
+const MOT=['movimiento','detenido','noche','inicia_mov','inicia_det','arranque','descartado','salto'];
+const nombreArchivo=()=>((dev&&dev.name)||'logger')+'_'+new Date().toISOString().slice(0,10);
+let dev,chCmd,chRsp,chDat,waiters=[],dl=null,dls=null,csvTxt='',nDown=0,guardado=false,armado=null,regs=[];
+
+$('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · recomendada con firmware '+FW_MIN;
+const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
+const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
+const habil=on=>['bDes','bGW','bSW','bLP','bLC','bLL','bId','bBat','bBatBor'].forEach(i=>$(i).disabled=!on);
+
+// CRC32 (igual al del firmware)
+const T=new Uint32Array(256).map((_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;return c>>>0});
+const crc32=b=>{let c=~0;for(let i=0;i<b.length;i++)c=T[(c^b[i])&255]^(c>>>8);return(~c)>>>0};
+
+// Capacidad de guardado (si la plataforma la ofrece)
+if(window.claude&&claude.use)claude.use('downloads').then(d=>{if(d){dls=d;$('bGua').hidden=false}}).catch(()=>{});
+
+function esperar(pred,ms){return new Promise((ok,ko)=>{
+  const w={pred,ok,t:setTimeout(()=>{waiters=waiters.filter(x=>x!==w);ko(new Error('Sin respuesta de la placa'))},ms||8000)};
+  waiters.push(w)})}
+async function cmd(txt,pred,ms){
+  const p=esperar(pred,ms);log('> '+txt);
+  try{await chCmd.writeValueWithResponse(enc.encode(txt))}catch(e){waiters.pop();throw e}
+  return p}
+const resp=pre=>t=>t.startsWith(pre)||t.startsWith('ERR');
+
+function onRsp(ev){
+  const t=dec.decode(ev.target.value);log('< '+t);
+  waiters=waiters.filter(w=>{if(w.pred(t)){clearTimeout(w.t);w.ok(t);return false}return true});
+  if(dl&&t.startsWith('END,')){dl.end=t.split(',');chequear()}
+}
+function onDat(ev){
+  if(!dl)return;const v=ev.target.value,seq=v.getUint16(0,true);
+  if(seq!==dl.seq){(dl.fail||(e=>{dl.err=e}))(new Error('Hueco en la secuencia (esperado '+dl.seq+', llegó '+seq+')'));return}
+  dl.parts.push(new Uint8Array(v.buffer.slice(v.byteOffset+2,v.byteOffset+v.byteLength)));
+  dl.bytes+=v.byteLength-2;dl.seq++;dl.last=Date.now();
+  $('pg').value=dl.total?Math.min(100,dl.bytes/(dl.total*16)*100):0;chequear()
+}
+function chequear(){
+  if(!dl||!dl.end||!dl.ok)return;
+  if(dl.bytes<+dl.end[3])return;               // faltan bloques por llegar
+  const all=new Uint8Array(dl.bytes);let o=0;dl.parts.forEach(p=>{all.set(p,o);o+=p.length});
+  const hex=crc32(all).toString(16).toUpperCase().padStart(8,'0');
+  if(dl.bytes!==+dl.end[3]||hex!==dl.end[2].toUpperCase())dl.fail(new Error('CRC distinto (placa '+dl.end[2]+', recibido '+hex+')'));
+  else dl.ok({all,next:+dl.end[1],hex})
+}
+
+async function reintentar(fn,n,ms){
+  for(let i=0;;i++){
+    try{return await fn()}
+    catch(e){
+      if(i>=n-1||!dev.gatt.connected)throw e;
+      estado('Esperando el emparejamiento: escribe el PIN en la ventana de iOS...','wn');
+      await new Promise(r=>setTimeout(r,ms))}}
+}
+async function conectar(){
+  if(!navigator.bluetooth){estado('Este navegador no soporta Web Bluetooth. Abre la página en Bluefy o Chrome.','er');return}
+  try{
+    estado('Buscando...');
+    dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'VEH-'},{namePrefix:'GPS-Logger'}],optionalServices:[SVC]});
+    dev.addEventListener('gattserverdisconnected',()=>{estado('Desconectado');habil(false);waiters.forEach(w=>clearTimeout(w.t));waiters=[]});
+    estado('Conectando (si se solicita PIN, escribe 123456)...');
+    const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
+    chCmd=await s.getCharacteristic(U(2));chRsp=await s.getCharacteristic(U(3));chDat=await s.getCharacteristic(U(4));
+    chRsp.addEventListener('characteristicvaluechanged',onRsp);chDat.addEventListener('characteristicvaluechanged',onDat);
+    await reintentar(()=>chRsp.startNotifications(),15,2000);await reintentar(()=>chDat.startNotifications(),15,2000);
+    estado('Conectado a '+dev.name,'ok');$('tit').textContent=dev.name;document.title=dev.name+' - GPS Logger';habil(true);
+    await info();await leerVent();await leerLora();await leerId();
+  }catch(e){const m=(e&&(e.message||e.name))||String(e);estado('Error: '+m+(dev&&dev.gatt&&!dev.gatt.connected?' (si acabas de poner el PIN, toca Conectar otra vez)':''),'er');log('ERR '+m)}
+}
+async function info(){
+  const p=(await cmd('INFO',resp('INFO'))).split(',');
+  if(p[0]!=='INFO')return;
+  $('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · firmware del equipo '+p[6]+(parseFloat(p[6])<parseFloat(FW_MIN)?' — anterior a '+FW_MIN+': sin contador de descartes ni motivos nuevos':' — compatible');
+  const loc=+p[3]?new Date((+p[3]-6*3600)*1000).toISOString().slice(0,16).replace('T',' '):'sin hora';
+  $('inf').textContent='Registros en placa: '+p[1]+' | Flash libre: '+Math.round(p[2]/1024)+' KB | Hora placa: '+loc+' | '+(p[4]==='mov'?'en movimiento':'detenido')+' | Fix GPS: '+(p[5]==='1'?'sí':'no')+' | FW '+p[6];
+  if(p[7]!==undefined){const t=textoBat(+p[7]);$('inf').insertAdjacentHTML('beforeend',' | '+t);$('batTxt').innerHTML=t}
+  if(p[8]!==undefined&&/^\d+$/.test(p[8]))$('inf').insertAdjacentText('beforeend',' | Movimientos descartados: '+p[8])
+}
+async function leerVent(){
+  const p=(await cmd('GETWIN',resp('WIN'))).split(',');
+  if(p[0]==='WIN'){$('wDur').value=p[1];$('wHor').value=p.slice(2).join(',')}
+}
+async function guardarVent(){
+  const h=$('wHor').value.split(/[\s,;]+/).filter(Boolean).join(',');
+  const r=await cmd('SETWIN,'+$('wDur').value.trim()+','+h,resp('WIN'));
+  if(r.startsWith('ERR'))estado('Ventanas no válidas (duración 5-180, horas hhmm, máximo 6)','er');
+  else{estado('Ventanas guardadas','ok');await leerVent()}
+}
+
+async function descargar(){
+  habil(false);$('bBor').disabled=true;$('bGua').disabled=true;$('bCop').disabled=true;$('bSha').disabled=true;$('bKml').disabled=true;guardado=false;
+  $('res').textContent='Descargando...';$('res').className='m';$('pg').hidden=false;$('pg').value=0;
+  try{
+    dl={seq:0,bytes:0,parts:[],end:null,total:0,last:Date.now()};
+    const g=await cmd('GET,0',resp('GET,OK'));
+    if(g.startsWith('ERR'))throw new Error(g);
+    const total=+g.split(',')[2];
+    if(!total){dl=null;$('res').textContent='La placa no tiene registros.';return}
+    dl.total=total;
+    const out=await new Promise((ok,ko)=>{
+      dl.ok=ok;dl.fail=ko;dl.last=Date.now();if(dl.err)return ko(dl.err);
+      const iv=setInterval(()=>{if(!dl){clearInterval(iv)}else if(Date.now()-dl.last>15000){clearInterval(iv);ko(new Error('La descarga se detuvo'))}},1000);
+      dl.iv=iv;chequear()});
+    clearInterval(dl.iv);dl=null;
+    procesar(out)
+  }catch(e){if(dl)clearInterval(dl.iv);dl=null;$('res').textContent='Falló: '+e.message+'. No se borró nada.';$('res').className='er'}
+  finally{$('pg').hidden=true;habil(!!(dev&&dev.gatt.connected))}
+}
+function procesar(o){
+  const dv=new DataView(o.all.buffer),n=o.all.length/16,f=[];
+  for(let i=0;i<n;i++){const b=i*16,u=dv.getUint32(b,true),m=dv.getUint8(b+15);
+    f.push([new Date(u*1000).toISOString().slice(0,19)+'Z',new Date((u-6*3600)*1000).toISOString().slice(0,19).replace('T',' '),
+      (dv.getInt32(b+4,true)/1e6).toFixed(6),(dv.getInt32(b+8,true)/1e6).toFixed(6),dv.getInt16(b+12,true),dv.getUint8(b+14),m>>4,MOT[m&15]||m&15].join(','))}
+  regs=[];for(let i=0;i<n;i++){const b=i*16,m=dv.getUint8(b+15);regs.push({u:dv.getUint32(b,true),lat:dv.getInt32(b+4,true)/1e6,lon:dv.getInt32(b+8,true)/1e6,alt:dv.getInt16(b+12,true),vel:dv.getUint8(b+14),sats:m>>4,m:m&15})}
+  csvTxt='utc,hora_local,lat,lon,alt_m,vel_kmh,sats,motivo\n'+f.join('\n')+'\n';nDown=o.next;
+  $('csv').value=csvTxt;$('csv').hidden=false;$('bCop').disabled=false;$('bSha').disabled=false;$('bKml').disabled=false;$('bGua').disabled=false;
+  $('res').innerHTML='<span class="ok">Verificado: '+n+' registros, CRC '+o.hex+' correcto.</span> Guarda o copia el CSV para habilitar el borrado.'
+}
+function marcarGuardado(){guardado=true;$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
+async function guardarCsv(){
+  try{const r=await dls.save({filename:nombreArchivo()+'.csv',data:csvTxt});if(r.status)marcarGuardado()}
+  catch(e){if(e.code!=='declined')$('res').textContent='No se pudo guardar: '+(e.message||e.code)}
+}
+async function copiarCsv(){
+  try{await navigator.clipboard.writeText(csvTxt)}catch(e){$('csv').select();document.execCommand('copy')}
+  $('res').innerHTML+=' <span class="ok">CSV copiado.</span>';marcarGuardado()
+}
+async function compartirCsv(){
+  const f=new File([csvTxt],nombreArchivo()+'.csv',{type:'text/csv'});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger'});marcarGuardado()}
+    else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
+  }catch(e){if(e.name!=='AbortError')$('res').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
+}
+function generarKml(){
+  const r=Math.PI/180,n=regs.length,loc=u=>new Date((u-6*3600)*1000).toISOString().slice(0,19).replace('T',' ');
+  const dst=(a,b)=>Math.hypot((b.lat-a.lat)*111320,(b.lon-a.lon)*111320*Math.cos(a.lat*r));
+  const brg=(a,b)=>{const y=Math.sin((b.lon-a.lon)*r)*Math.cos(b.lat*r),x=Math.cos(a.lat*r)*Math.sin(b.lat*r)-Math.sin(a.lat*r)*Math.cos(b.lat*r)*Math.cos((b.lon-a.lon)*r);return(Math.atan2(y,x)/r+360)%360};
+  const ic='https://maps.google.com/mapfiles/kml/shapes/';
+  let k='<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>'+((dev&&dev.name)||'GPS Logger')+' '+loc(regs[0].u).slice(0,10)+'</name>'+
+   '<Style id="ruta"><LineStyle><color>ff0000ff</color><width>4</width></LineStyle></Style>'+
+   '<Placemark><name>Recorrido</name><styleUrl>#ruta</styleUrl><LineString><tessellate>1</tessellate><altitudeMode>clampToGround</altitudeMode><coordinates>'+
+   regs.map(p=>p.lon+','+p.lat+','+p.alt).join(' ')+'</coordinates></LineString></Placemark><Folder><name>Puntos</name>';
+  regs.forEach((p,i)=>{
+    let h=null;
+    for(let j=i+1;j<n&&h==null;j++)if(dst(p,regs[j])>=20)h=brg(p,regs[j]);
+    for(let j=i-1;j>=0&&h==null;j--)if(dst(regs[j],p)>=20)h=brg(regs[j],p);
+    const flecha=h!=null&&p.m!==1&&p.m!==2&&p.m!==5&&p.m!==6&&p.m!==7,t=loc(p.u),ext=i==0||i==n-1;
+    const nom=(i==0?'Inicio ':i==n-1?'Fin ':'')+t.slice(11,16);
+    k+='<Placemark><name>'+nom+'</name><description>'+t+' | '+(MOT[p.m]||p.m)+' | '+p.vel+' km/h | '+p.sats+' sats | '+p.alt+' m</description>'+
+     '<TimeStamp><when>'+new Date(p.u*1000).toISOString().slice(0,19)+'Z</when></TimeStamp>'+
+     '<Style><IconStyle><scale>'+(flecha?0.9:0.5)+'</scale>'+(flecha?'<heading>'+((h+180)%360).toFixed(0)+'</heading>':'')+'<Icon><href>'+ic+(flecha?'arrow.png':'placemark_circle.png')+'</href></Icon></IconStyle><LabelStyle><scale>'+(ext?1:0)+'</scale></LabelStyle></Style>'+
+     '<Point><coordinates>'+p.lon+','+p.lat+','+p.alt+'</coordinates></Point></Placemark>';
+  });
+  return k+'</Folder></Document></kml>';
+}
+async function compartirKml(){
+  if(!regs.length)return;
+  const f=new File([generarKml()],nombreArchivo()+'.kml',{type:'application/vnd.google-earth.kml+xml'});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'GPS Logger KML'});marcarGuardado()}
+    else $('res').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos; usa Copiar CSV.</span>'
+  }catch(e){if(e.name!=='AbortError')$('res').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
+}
+async function borrar(){
+  if(!armado){$('bBor').textContent='Toca otra vez para CONFIRMAR el borrado';armado=setTimeout(()=>{armado=null;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'},8000);return}
+  clearTimeout(armado);armado=null;$('bBor').disabled=true;
+  try{const r=await cmd('DEL,'+nDown,resp('DEL'));
+    $('res').textContent=r.startsWith('DEL,OK')?'Borrado. Registros restantes en placa: '+r.split(',')[2]:'Error al borrar: '+r;
+    $('bBor').textContent='Borrar de la placa';await info()
+  }catch(e){$('res').textContent='Error al borrar: '+e.message}
+}
+
+const fmtL=u=>new Date((u-6*3600)*1000).toISOString().slice(0,16).replace('T',' ');
+function mostrarLora(t){const p=t.split(',');
+  if(p[0]!=='LORA'){$('lEst').textContent='No válido: '+t+' (revisa horas hhmm e intervalo de 10 a 3600 s)';return}
+  $('lEst').textContent=p[4]==='off'?'Sin programar (LoRa apagado).':'Estado: '+(p[4]==='activo'?'ACTIVO':'programado')+' | '+fmtL(+p[1])+' a '+fmtL(+p[2])+' | cada '+p[3]+' s'}
+let idArm=null;
+async function leerId(){
+  const p=(await cmd('GETID',resp('ID'))).split(',');
+  if(p[0]==='ID')$('idNum').value=p[1];
+}
+async function cambiarId(){
+  const n=parseInt($('idNum').value,10);
+  if(!(n>=1&&n<=99)){$('idEst').textContent='Escribe un número de 1 a 99';return}
+  const nom='VEH-'+String(n).padStart(2,'0');
+  if(!idArm){
+    $('bId').textContent='Toca otra vez para asignar '+nom;
+    idArm=setTimeout(()=>{idArm=null;$('bId').textContent='Asignar nombre'},8000);return}
+  clearTimeout(idArm);idArm=null;$('bId').textContent='Asignar nombre';
+  const r=await cmd('SETID,'+n,resp('ID'),20000);
+  const p=r.split(',');
+  const E={lora_sin_resp:'el módulo LoRa no contesta',lora_dir:'el módulo LoRa no guardó la dirección',lora_red:'el módulo LoRa no guardó la red'};
+  $('idEst').innerHTML=p[0]==='ID'?'Listo: <b>'+p[2]+'</b> (dirección LoRa '+n+' verificada). El equipo se reinicia; vuelve a conectar.':'<span class="er">Error: '+r+'</span>';
+}
+async function leerLora(){mostrarLora(await cmd('GETLORA',resp('LORA')))}
+async function progLora(){
+  const hm=v=>{v=v.trim().padStart(4,'0');return[+v.slice(0,2),+v.slice(2)]};
+  const[h1,m1]=hm($('lIni').value),[h2,m2]=hm($('lFin').value);
+  if(!(h1<24&&m1<60&&h2<24&&m2<60)){$('lEst').textContent='Horas no válidas (formato hhmm, por ejemplo 1800)';return}
+  const now=Date.now()/1000,L=new Date(Date.now()-6*3600e3),Y=L.getUTCFullYear(),M=L.getUTCMonth(),D=L.getUTCDate();
+  let a=Date.UTC(Y,M,D,h1+6,m1)/1000,b=Date.UTC(Y,M,D,h2+6,m2)/1000;
+  if(b<=a)b+=86400;if(b<=now){a+=86400;b+=86400}
+  mostrarLora(await cmd('SETLORA,'+a+','+b+','+$('lInt').value.trim(),resp('LORA')))}
+async function cancelarLora(){mostrarLora(await cmd('LORAOFF',resp('LORA')))}
+$('bLP').onclick=()=>progLora().catch(e=>estado(e.message,'er'));$('bLC').onclick=()=>cancelarLora().catch(e=>estado(e.message,'er'));$('bLL').onclick=()=>leerLora().catch(e=>estado(e.message,'er'));
+$('bId').onclick=()=>cambiarId().catch(e=>estado(e.message,'er'));$('bSha').onclick=compartirCsv;$('bKml').onclick=compartirKml;$('bCon').onclick=conectar;$('bDes').onclick=descargar;$('bGua').onclick=guardarCsv;$('bCop').onclick=copiarCsv;
+$('bBor').onclick=borrar;$('bGW').onclick=()=>leerVent().catch(e=>estado(e.message,'er'));$('bSW').onclick=()=>guardarVent().catch(e=>estado(e.message,'er'));
+
+// ---- Batería
+const PCT=[[4.20,100],[4.10,92],[4.00,82],[3.90,70],[3.80,55],[3.70,38],[3.60,22],[3.50,12],[3.40,6],[3.30,3],[3.00,0]];
+const pct=v=>{if(v>=PCT[0][0])return 100;for(let i=1;i<PCT.length;i++)if(v>=PCT[i][0]){const a=PCT[i-1],b=PCT[i];return Math.round(b[1]+(a[1]-b[1])*(v-b[0])/(a[0]-b[0]))}return 0};
+function textoBat(mv){
+  if(!(mv>=2000))return '<span class="m">Batería: sin medición (divisor no conectado)</span>';
+  const v=mv/1000,c=v<3.5?'er':v<3.7?'wn':'ok';
+  return '<span class="'+c+'">Batería: '+v.toFixed(2)+' V (~'+pct(v)+'%)'+(v<3.5?' — BAJA':'')+'</span>'}
+let batCsv='',batArm=null;
+async function descargarBat(){
+  habil(false);$('bBatSha').disabled=true;$('batRes').className='m';
+  try{
+    const f=[];let desde=0,total=1;
+    while(desde<total){
+      const r=(await cmd('GETBAT,'+desde,resp('BAT'),8000)).split(',');
+      if(r[0]!=='BAT')throw new Error(r.join(','));
+      total=+r[1];const n=+r[3];
+      if(+r[2]!==desde||!(n>0))break;
+      (r[4]||'').split(';').filter(Boolean).forEach(e=>{const[m,v]=e.split(':');f.push([m*60,+v])});
+      desde+=n;$('batRes').textContent='Descargando '+desde+' de '+total+'...'}
+    if(!f.length){$('batRes').textContent='La bitácora está vacía (se anota solo con hora GPS y divisor conectado).';return}
+    const L=u=>new Date((u-6*3600)*1000).toISOString().slice(0,19).replace('T',' ');
+    batCsv='utc,hora_local,mV,pct\n'+f.map(([u,v])=>[new Date(u*1000).toISOString().slice(0,19)+'Z',L(u),v,pct(v/1000)].join(',')).join('\n')+'\n';
+    const a=f[0],b=f[f.length-1],h=(b[0]-a[0])/3600;
+    $('batRes').innerHTML='<span class="ok">'+f.length+' anotaciones</span> del '+L(a[0]).slice(0,16)+' al '+L(b[0]).slice(0,16)+' | de '+(a[1]/1000).toFixed(2)+' V a '+(b[1]/1000).toFixed(2)+' V'+(h>=1?' | ritmo ~'+Math.round((a[1]-b[1])/h)+' mV/h':'');
+    $('bBatSha').disabled=false;
+  }catch(e){$('batRes').textContent='Falló: '+e.message;$('batRes').className='er'}
+  finally{habil(!!(dev&&dev.gatt.connected))}
+}
+async function compartirBat(){
+  const f=new File([batCsv],nombreArchivo()+'_bateria.csv',{type:'text/csv'});
+  try{
+    if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],title:'Batería GPS Logger'});
+    else $('batRes').innerHTML+=' <span class="wn">Este navegador no puede compartir archivos.</span>'
+  }catch(e){if(e.name!=='AbortError')$('batRes').innerHTML+=' <span class="er">No se pudo compartir: '+e.message+'</span>'}
+}
+async function borrarBat(){
+  if(!batArm){$('bBatBor').textContent='Toca otra vez para borrar la bitácora';batArm=setTimeout(()=>{batArm=null;$('bBatBor').textContent='Borrar bitácora'},8000);return}
+  clearTimeout(batArm);batArm=null;$('bBatBor').textContent='Borrar bitácora';
+  const r=await cmd('DELBAT',resp('DELBAT'));
+  $('batRes').className='m';$('batRes').textContent=r.startsWith('DELBAT,OK')?'Bitácora borrada.':'Error: '+r;
+  batCsv='';$('bBatSha').disabled=true;
+}
+$('bBat').onclick=()=>descargarBat();$('bBatSha').onclick=compartirBat;$('bBatBor').onclick=()=>borrarBat().catch(e=>estado(e.message,'er'));
+</script>
+</body>
+</html>
