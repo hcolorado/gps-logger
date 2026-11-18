@@ -208,6 +208,16 @@ function detenerPing(){
   if(pingTimer){clearInterval(pingTimer);pingTimer=null}
 }
 
+async function reintentar(fn,n,ms){
+  for(let i=0;;i++){
+    try{return await fn()}
+    catch(e){
+      if(i>=n-1||!dev||!dev.gatt||!dev.gatt.connected)throw e;
+      estado('Esperando emparejamiento: escribe el PIN en la ventana de iOS...','wn');
+      log('Esperando PIN / emparejamiento ('+(i+1)+'/'+n+')...');
+      await new Promise(r=>setTimeout(r,ms))}}
+}
+
 async function onDisconnect(){
   detenerPing();
   if(reconectando||!dev){estado('Central desconectada. Toca Conectar.','er');return}
@@ -220,9 +230,9 @@ async function onDisconnect(){
       log('Reintento '+i+'/5...');
       const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
       chC=await s.getCharacteristic(U(2));chE=await s.getCharacteristic(U(3));
-      await chC.writeValueWithResponse(enc.encode('INFO'));
       chE.addEventListener('characteristicvaluechanged',onEvt);
-      await chE.startNotifications();
+      await reintentar(()=>chE.startNotifications(),5,1000);
+      await chC.writeValueWithResponse(enc.encode('INFO'));
       await chC.writeValueWithResponse(enc.encode('LAST'));
       estado('Conectado a '+dev.name,'ok');
       log('Reconexión exitosa');
@@ -259,11 +269,15 @@ async function conectar(){
     estado('Conectando (si pide PIN, escribe 162638)...');
     const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
     chC=await s.getCharacteristic(U(2));chE=await s.getCharacteristic(U(3));
-    await chC.writeValueWithResponse(enc.encode('INFO'));      // completa emparejamiento PIN
     chE.addEventListener('characteristicvaluechanged',onEvt);
-    await chE.startNotifications();
-    await chC.writeValueWithResponse(enc.encode('LAST'));      // solicita última posición de cada vehículo
-    await chC.writeValueWithResponse(enc.encode('INFO'));      // solicita versión y estado
+    
+    // Esperar pacientemente el emparejamiento PIN de iOS antes de enviar comandos
+    await reintentar(()=>chE.startNotifications(),15,2000);
+
+    // Con el enlace autenticado y seguro, solicitar estado inicial
+    await chC.writeValueWithResponse(enc.encode('INFO'));
+    await chC.writeValueWithResponse(enc.encode('LAST'));
+
     estado('Conectado a '+dev.name,'ok');
     activarWakeLock();
     iniciarPing();
