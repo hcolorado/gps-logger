@@ -4,7 +4,7 @@
 <!-- Página del logger, versión 3.0 (HELTEC 3.0 - V4.3 Nodo). Compatible con firmware 2.4 / ESP32-S3 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>GPS Logger HELTEC 3.0 - Descarga BLE</title>
+<title>GPS LOGGER 3.0</title>
 <style>
 :root{
   --bg:#0f141c;--card:#18202c;--tx:#f1f5f9;--mut:#94a3b8;--bd:#2a3649;
@@ -16,15 +16,8 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 main{max-width:680px;margin:0 auto;padding:16px}
 
-/* Banner distintivo HELTEC 3.0 */
-.h3-banner{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#241c10 0%,#1a202c 100%);border:1px solid #f59e0b55;box-shadow:0 0 16px var(--ac-glow);border-radius:14px;padding:14px 16px;margin-bottom:14px}
-.h3-brand{display:flex;align-items:center;gap:12px}
-.h3-logo{font-size:28px;filter:drop-shadow(0 0 6px #f59e0b)}
-.h3-title{font-size:18px;font-weight:900;letter-spacing:1px;color:#fff;text-shadow:0 0 8px rgba(245,158,11,0.6)}
-.h3-sub{font-size:12px;color:#f59e0b;font-weight:600;letter-spacing:0.5px}
-.h3-badge{background:#f59e0b;color:#000;font-size:11px;font-weight:900;padding:4px 8px;border-radius:6px;letter-spacing:1px}
-
-h1{font-size:20px;margin:4px 0 12px;display:none}h2{font-size:15px;margin:0 0 8px;color:#f59e0b;font-weight:700}
+h1{font-size:24px;margin:8px 0 4px;font-weight:800;letter-spacing:0.5px;color:var(--ac)}
+h2{font-size:15px;margin:0 0 8px;color:#f59e0b;font-weight:700}
 .c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3)}
 button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 15px;background:var(--ac);color:#1a1003;margin:4px 6px 4px 0;cursor:pointer;transition:all .2s ease}
 button:hover{filter:brightness(1.15);box-shadow:0 0 10px var(--ac-glow)}
@@ -39,19 +32,8 @@ progress{width:100%;height:10px;border-radius:5px;overflow:hidden}
 </head>
 <body>
 <main>
-<div class="h3-banner">
-  <div class="h3-brand">
-    <span class="h3-logo">🛰️</span>
-    <div>
-      <div class="h3-title">GPS LOGGER HELTEC 3.0</div>
-      <div class="h3-sub">ESP32-S3 · Quectel L76K GNSS · SX1262 LoRa · Nodo V4.3</div>
-    </div>
-  </div>
-  <div class="h3-badge">LOGGER 3.0</div>
-</div>
-
-<h1 id="tit">GPS Logger</h1>
-<div id="ver" class="m" style="margin:-6px 0 10px"></div>
+<h1 id="tit">GPS LOGGER 3.0</h1>
+<div id="ver" class="m" style="margin:0 0 14px">Página v1.0 · Compatible con Firmware v1.0</div>
 
 <div class="c">
   <button id="bCon">Conectar a Logger 3.0</button>
@@ -118,7 +100,7 @@ progress{width:100%;height:10px;border-radius:5px;overflow:hidden}
 </main>
 
 <script>
-const PAG_VER='1.4',PAG_FECHA='15-nov-2026',FW_MIN='2.4';
+const PAG_VER='1.0',PAG_FECHA='18-nov-2026',FW_MIN='1.0';
 const SVC='a1c20001-5b7e-4d3a-9c11-7e5f0a6b2d10',
   U=n=>'a1c2000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id), enc=new TextEncoder(), dec=new TextDecoder();
@@ -126,7 +108,7 @@ const MOT=['movimiento','detenido','noche','inicia_mov','inicia_det','arranque',
 const nombreArchivo=()=>((dev&&dev.name)||'logger')+'_'+new Date().toISOString().slice(0,10);
 let dev,chCmd,chRsp,chDat,waiters=[],dl=null,dls=null,csvTxt='',nDown=0,guardado=false,armado=null,regs=[];
 
-$('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · recomendada con firmware '+FW_MIN;
+$('ver').textContent='Página v'+PAG_VER+' · Compatible con Firmware v'+FW_MIN;
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
 const habil=on=>['bDes','bGW','bSW','bLP','bLC','bLL','bId','bBat','bBatBor'].forEach(i=>$(i).disabled=!on);
@@ -202,7 +184,7 @@ async function conectar(){
 async function info(){
   const p=(await cmd('INFO',resp('INFO'))).split(',');
   if(p[0]!=='INFO')return;
-  $('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · firmware del equipo '+p[6]+(parseFloat(p[6])<parseFloat(FW_MIN)?' — anterior a '+FW_MIN+': sin contador de descartes ni motivos nuevos':' — compatible');
+  $('ver').textContent='Página v'+PAG_VER+' · Firmware de la placa v'+p[6]+(parseFloat(p[6])<parseFloat(FW_MIN)?' (requiere firmware v'+FW_MIN+')':' (compatible)');
   const loc=+p[3]?new Date((+p[3]-6*3600)*1000).toISOString().slice(0,16).replace('T',' '):'sin hora';
   $('inf').textContent='Registros en placa: '+p[1]+' | Flash libre: '+Math.round(p[2]/1024)+' KB | Hora placa: '+loc+' | '+(p[4]==='mov'?'en movimiento':'detenido')+' | Fix GPS: '+(p[5]==='1'?'sí':'no')+' | FW '+p[6];
   if(p[7]!==undefined){const t=textoBat(+p[7]);$('inf').insertAdjacentHTML('beforeend',' | '+t);$('batTxt').innerHTML=t}
