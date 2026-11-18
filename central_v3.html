@@ -181,11 +181,66 @@ function iniciarGPS(){
     e=>{$('yo').textContent='Sin GPS del teléfono: '+e.message;gpsOn=false},{enableHighAccuracy:true,maximumAge:2000});
 }
 
+let wakeLock=null,pingTimer=null,reconectando=false;
+
+async function activarWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock=await navigator.wakeLock.request('screen');
+      log('Pantalla activa (WakeLock OK)');
+    }
+  }catch(e){log('WakeLock: '+e.message)}
+}
+document.addEventListener('visibilitychange',async()=>{
+  if(wakeLock!==null&&document.visibilityState==='visible')activarWakeLock();
+});
+
+function iniciarPing(){
+  if(pingTimer)clearInterval(pingTimer);
+  pingTimer=setInterval(async()=>{
+    if(!dev||!dev.gatt||!dev.gatt.connected||!chC)return;
+    try{
+      await chC.writeValueWithResponse(enc.encode('PING'));
+    }catch(e){log('Ping falló: '+e.message)}
+  },10000);
+}
+function detenerPing(){
+  if(pingTimer){clearInterval(pingTimer);pingTimer=null}
+}
+
+async function onDisconnect(){
+  detenerPing();
+  if(reconectando||!dev){estado('Central desconectada. Toca Conectar.','er');return}
+  reconectando=true;estado('Conexión perdida (520). Reconectando...','wn');
+  log('Conexión BLE perdida (520). Intentando reconectar...');
+  for(let i=1;i<=5;i++){
+    try{
+      await new Promise(r=>setTimeout(r,2000));
+      if(!dev)break;
+      log('Reintento '+i+'/5...');
+      const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
+      chC=await s.getCharacteristic(U(2));chE=await s.getCharacteristic(U(3));
+      await chC.writeValueWithResponse(enc.encode('INFO'));
+      chE.addEventListener('characteristicvaluechanged',onEvt);
+      await chE.startNotifications();
+      await chC.writeValueWithResponse(enc.encode('LAST'));
+      estado('Conectado a '+dev.name,'ok');
+      log('Reconexión exitosa');
+      reconectando=false;
+      activarWakeLock();
+      iniciarPing();
+      return;
+    }catch(e){log('Fallo reconexión '+i+': '+e.message)}
+  }
+  reconectando=false;
+  estado('Central desconectada. Toca Conectar a Central 3.0','er');
+}
+
 function onEvt(ev){
   const t=dec.decode(ev.target.value),p=t.split(',');
   if(p[0]==='POS'){log(t);nuevaPos(+p[3],+p[4],+p[2],+p[5],+p[6],p[1])}
   else if(p[0]==='INFO'){const fw=p[3]||'?';$('ver').textContent='Página v'+PAG_VER+' · firmware central '+fw+(parseFloat(fw)<parseFloat(FW_MIN)?' (incompatible)':' (compatible)');log(t)}
-  else if(p[0]==='HB'){estado('Conectado a la central | mensajes recibidos: '+p[1],'ok')}
+  else if(p[0]==='HB'){estado('Conectado a la central | paquetes LoRa: '+p[1],'ok')}
   else log(t);
 }
 async function conectar(){
@@ -200,7 +255,7 @@ async function conectar(){
       ],
       optionalServices:[SVC]
     });
-    dev.addEventListener('gattserverdisconnected',()=>estado('Central desconectada. Toca Conectar.','er'));
+    dev.addEventListener('gattserverdisconnected',onDisconnect);
     estado('Conectando (si pide PIN, escribe 162638)...');
     const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
     chC=await s.getCharacteristic(U(2));chE=await s.getCharacteristic(U(3));
@@ -210,6 +265,8 @@ async function conectar(){
     await chC.writeValueWithResponse(enc.encode('LAST'));      // solicita última posición de cada vehículo
     await chC.writeValueWithResponse(enc.encode('INFO'));      // solicita versión y estado
     estado('Conectado a '+dev.name,'ok');
+    activarWakeLock();
+    iniciarPing();
   }catch(e){estado('Error: '+e.message,'er');log('ERR '+e.message)}
 }
 function demo(){
