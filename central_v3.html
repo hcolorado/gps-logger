@@ -4,7 +4,7 @@
 <!-- Página de la central, versión 3.0 (HELTEC 3.0 - V4.3 Flotilla). Compatible con ESP32-S3 y SX1262 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Central HELTEC 3.0 - Flotilla</title>
+<title>CENTRAL GPS 3.0</title>
 <style>
 :root{
   --bg:#0b0f17;--card:#131b26;--tx:#e2e8f0;--mut:#8896ab;--bd:#223044;
@@ -16,14 +16,7 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 main{max-width:680px;margin:0 auto;padding:12px}
 
-/* Banner distintivo HELTEC 3.0 */
-.h3-banner{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#131e2e 0%,#0f172a 100%);border:1px solid #00e5ff44;box-shadow:0 0 15px var(--ac-glow);border-radius:14px;padding:14px 16px;margin-bottom:12px}
-.h3-brand{display:flex;align-items:center;gap:12px}
-.h3-logo{font-size:28px;filter:drop-shadow(0 0 6px #00e5ff)}
-.h3-title{font-size:18px;font-weight:900;letter-spacing:1px;color:#fff;text-shadow:0 0 8px rgba(0,229,255,0.6)}
-.h3-sub{font-size:12px;color:#00e5ff;font-weight:600;letter-spacing:0.5px}
-.h3-badge{background:#00e5ff;color:#000;font-size:11px;font-weight:900;padding:4px 8px;border-radius:6px;letter-spacing:1px}
-
+h1{font-size:24px;margin:8px 0 4px;font-weight:800;letter-spacing:0.5px;color:var(--ac)}
 .c{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 4px 12px rgba(0,0,0,0.3)}
 button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 15px;background:var(--ac);color:#06101e;margin:3px 6px 3px 0;cursor:pointer;transition:all .2s ease}
 button:hover{filter:brightness(1.15);box-shadow:0 0 10px var(--ac-glow)}
@@ -40,23 +33,14 @@ button:disabled{opacity:.4;cursor:not-allowed}
 </head>
 <body>
 <main>
-<div class="h3-banner">
-  <div class="h3-brand">
-    <span class="h3-logo">⚡</span>
-    <div>
-      <div class="h3-title">CENTRAL HELTEC 3.0</div>
-      <div class="h3-sub">ESP32-S3 · SX1262 LoRa 915 MHz · Flotilla V4.3</div>
-    </div>
-  </div>
-  <div class="h3-badge">HELTEC 3.0</div>
-</div>
+<h1 id="tit">CENTRAL GPS 3.0</h1>
+<div id="ver" class="m" style="margin:0 0 14px">Página v1.0 · Compatible con Firmware v1.0</div>
 
 <div class="c">
   <button id="bCon">Conectar a Central 3.0</button>
   <button id="bDemo" class="s">Modo Demo</button>
   <button id="bCen" class="s">Centrar mapa</button>
   <div id="est" class="m" style="margin-top:8px">Desconectado (PIN por defecto: 162638)</div>
-  <div id="ver" class="m"></div>
 </div>
 
 <div class="c" id="chips">Sin vehículos todavía</div>
@@ -75,14 +59,14 @@ button:disabled{opacity:.4;cursor:not-allowed}
 </main>
 
 <script>
-const PAG_VER='3.0',PAG_FECHA='18-nov-2026',FW_MIN='1.2';
+const PAG_VER='1.0',PAG_FECHA='18-nov-2026',FW_MIN='1.0';
 const SVC='a1c30001-5b7e-4d3a-9c11-7e5f0a6b2d10',U=n=>'a1c3000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id),enc=new TextEncoder(),dec=new TextDecoder();
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,CARD=['N','NE','E','SE','S','SO','O','NO'];
 const COL=['#00e5ff','#00e676','#ffaa00','#ff3d71','#d946ef','#8b5cf6','#38bdf8','#f43f5e'];
 let dev,chC,chE,me=null,heading=null,demoT=null,gpsOn=false,map=null,mMe,fit=true,V={},sel=null,auto=true;
 
-$('ver').textContent='Panel HELTEC 3.0 v'+PAG_VER+' ('+PAG_FECHA+') · Central Multi-Vehículo';
+$('ver').textContent='Página v'+PAG_VER+' · Compatible con Firmware v'+FW_MIN;
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
 const estado=(t,c)=>{$('est').textContent=t;$('est').className=c||'m'};
 const nom=d=>d?'VEH-'+String(d).padStart(2,'0'):'Vehículo';
@@ -200,7 +184,7 @@ function iniciarGPS(){
 function onEvt(ev){
   const t=dec.decode(ev.target.value),p=t.split(',');
   if(p[0]==='POS'){log(t);nuevaPos(+p[3],+p[4],+p[2],+p[5],+p[6],p[1])}
-  else if(p[0]==='INFO'){const fw=p[3]||'?';$('ver').textContent='Página v'+PAG_VER+' ('+PAG_FECHA+') · central '+fw+(parseFloat(fw)<parseFloat(FW_MIN)?' — anterior a '+FW_MIN+': solo mostrará el último vehículo':' — compatible');log(t)}
+  else if(p[0]==='INFO'){const fw=p[3]||'?';$('ver').textContent='Página v'+PAG_VER+' · firmware central '+fw+(parseFloat(fw)<parseFloat(FW_MIN)?' (incompatible)':' (compatible)');log(t)}
   else if(p[0]==='HB'){estado('Conectado a la central | mensajes recibidos: '+p[1],'ok')}
   else log(t);
 }
