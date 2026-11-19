@@ -22,6 +22,7 @@ button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 15p
 button:hover{filter:brightness(1.15);box-shadow:0 0 10px var(--ac-glow)}
 button.s{background:transparent;color:var(--ac);border:1px solid var(--ac)}
 button:disabled{opacity:.4;cursor:not-allowed}
+button.d{background:var(--er);color:#fff}
 .m{color:var(--mut);font-size:14px}.ok{color:var(--ok);font-weight:600}.er{color:var(--er);font-weight:600}.wn{color:var(--wn);font-weight:600}
 .g{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:center}
 .big{font-size:38px;font-weight:800;line-height:1.1;color:#fff;text-shadow:0 0 10px rgba(255,255,255,0.2)}
@@ -29,23 +30,52 @@ button:disabled{opacity:.4;cursor:not-allowed}
 #map{height:46vh;min-height:260px;border-radius:12px;border:1px solid var(--bd)}
 #chips button{margin:3px 6px 3px 0;padding:7px 12px;font-size:14px;border-radius:8px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;border:1px solid #fff}
 #log{font:12px/1.35 ui-monospace,Menlo,monospace;color:var(--mut);max-height:100px;overflow:auto;white-space:pre-wrap;background:#090d14;padding:8px;border-radius:8px;border:1px solid #1a2333}
+
+/* Modo Pantalla Completa / Seguimiento */
+body.fullscreen-mode{overflow:hidden}
+body.fullscreen-mode main{max-width:100%!important;padding:0!important;margin:0!important}
+body.fullscreen-mode main>*:not(#cardHud):not(#map):not(#bSalirFull):not(#bCenFull){display:none!important}
+body.fullscreen-mode #map{
+  position:fixed!important;top:0;left:0;width:100vw!important;height:100vh!important;height:100dvh!important;
+  border-radius:0!important;border:0!important;margin:0!important;z-index:50!important
+}
+body.fullscreen-mode #cardHud{
+  position:fixed!important;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;
+  margin:0!important;z-index:100!important;background:rgba(19,27,38,0.88)!important;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(0,229,255,0.4)!important;box-shadow:0 10px 30px rgba(0,0,0,0.7)!important;
+  padding:10px 14px!important
+}
+#bSalirFull{
+  display:none;position:fixed;bottom:max(18px,env(safe-area-inset-bottom));right:14px;z-index:1000;
+  background:rgba(19,27,38,0.92);color:var(--ac);border:1px solid var(--ac);padding:10px 16px;font-weight:700;
+  box-shadow:0 6px 20px rgba(0,0,0,0.6);border-radius:10px
+}
+#bCenFull{
+  display:none;position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:14px;z-index:1000;
+  background:rgba(19,27,38,0.92);color:#fff;border:1px solid var(--bd);padding:10px 16px;font-weight:700;
+  box-shadow:0 6px 20px rgba(0,0,0,0.6);border-radius:10px
+}
+body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:block!important}
 </style>
 </head>
 <body>
 <main>
 <h1 id="tit">CENTRAL GPS 3.0</h1>
-<div id="ver" class="m" style="margin:0 0 14px">Página v1.0 · Compatible con Firmware v1.0</div>
+<div id="ver" class="m" style="margin:0 0 14px">Página v1.1 · Compatible con Firmware v1.0</div>
 
 <div class="c">
   <button id="bCon">Conectar a Central 3.0</button>
+  <button id="bDesc" class="d" hidden onclick="desconectar()">Desconectar</button>
   <button id="bDemo" class="s">Modo Demo</button>
   <button id="bCen" class="s">Centrar mapa</button>
+  <button id="bFull" class="s" onclick="toggleFullscreen()">Pantalla Completa</button>
   <div id="est" class="m" style="margin-top:8px">Desconectado (PIN por defecto: 162638)</div>
 </div>
 
 <div class="c" id="chips">Sin vehículos todavía</div>
 
-<div class="c g">
+<div class="c g" id="cardHud">
   <div><div class="m" id="vsel">Distancia al vehículo</div><div class="big" id="dist">--</div><div class="m" id="rum">Rumbo: --</div></div>
   <div style="text-align:center"><span id="ar">&#9650;</span><div class="m" id="rel"></div></div>
   <div><div class="m">Señal LoRa SX1262</div><div id="sen">--</div></div>
@@ -53,18 +83,54 @@ button:disabled{opacity:.4;cursor:not-allowed}
 </div>
 
 <div id="map"></div>
+<button id="bCenFull" class="s" onclick="fit=true;refresh()">Centrar</button>
+<button id="bSalirFull" class="s" onclick="toggleFullscreen()">✕ Salir Pantalla Completa</button>
 <div class="m" id="nomap" hidden style="margin-top:6px">Sin mapa (no hay internet o no cargó). La distancia y el rumbo siguen funcionando.</div>
 <div class="c" style="margin-top:10px"><div class="m" id="pos">Vehículo: --</div><div class="m" id="yo">Tu posición: esperando GPS del teléfono...</div></div>
 <div class="c"><div id="log"></div></div>
 </main>
 
 <script>
-const PAG_VER='1.0',PAG_FECHA='18-nov-2026',FW_MIN='1.0';
+const PAG_VER='1.1',PAG_FECHA='18-nov-2026',FW_MIN='1.0';
 const SVC='a1c30001-5b7e-4d3a-9c11-7e5f0a6b2d10',U=n=>'a1c3000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id),enc=new TextEncoder(),dec=new TextDecoder();
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,CARD=['N','NE','E','SE','S','SO','O','NO'];
 const COL=['#00e5ff','#00e676','#ffaa00','#ff3d71','#d946ef','#8b5cf6','#38bdf8','#f43f5e'];
 let dev,chC,chE,me=null,heading=null,demoT=null,gpsOn=false,map=null,mMe,fit=true,V={},sel=null,auto=true;
+let manualDisconnect=false;
+
+function toggleFullscreen(){
+  const isFull=document.body.classList.toggle('fullscreen-mode');
+  if(isFull){
+    try{
+      if(!document.fullscreenElement&&document.documentElement.requestFullscreen){
+        document.documentElement.requestFullscreen().catch(()=>{});
+      }
+    }catch(e){}
+    $('bFull').textContent='Pantalla Normal';
+    log('Modo Pantalla Completa activo');
+  }else{
+    try{
+      if(document.fullscreenElement&&document.exitFullscreen){
+        document.exitFullscreen().catch(()=>{});
+      }
+    }catch(e){}
+    $('bFull').textContent='Pantalla Completa';
+    log('Modo Normal activo');
+  }
+  setTimeout(()=>{if(map)map.invalidateSize()},150);
+}
+
+function desconectar(){
+  manualDisconnect=true;
+  detenerPing();
+  if(dev&&dev.gatt&&dev.gatt.connected){
+    dev.gatt.disconnect();
+  }
+  estado('Central desconectada manualmente','m');
+  $('bCon').hidden=false;
+  $('bDesc').hidden=true;
+}
 
 $('ver').textContent='Página v'+PAG_VER+' · Compatible con Firmware v'+FW_MIN;
 const log=m=>{const l=$('log');l.textContent=new Date().toLocaleTimeString()+' '+m+'\n'+l.textContent};
@@ -220,7 +286,20 @@ async function reintentar(fn,n,ms){
 
 async function onDisconnect(){
   detenerPing();
-  if(reconectando||!dev){estado('Central desconectada. Toca Conectar.','er');return}
+  if(manualDisconnect){
+    manualDisconnect=false;
+    reconectando=false;
+    $('bCon').hidden=false;
+    $('bDesc').hidden=true;
+    estado('Central desconectada','m');
+    return;
+  }
+  if(reconectando||!dev){
+    estado('Central desconectada. Toca Conectar.','er');
+    $('bCon').hidden=false;
+    $('bDesc').hidden=true;
+    return;
+  }
   reconectando=true;estado('Conexión perdida (520). Reconectando...','wn');
   log('Conexión BLE perdida (520). Intentando reconectar...');
   for(let i=1;i<=5;i++){
@@ -235,6 +314,8 @@ async function onDisconnect(){
       await chC.writeValueWithResponse(enc.encode('INFO'));
       await chC.writeValueWithResponse(enc.encode('LAST'));
       estado('Conectado a '+dev.name,'ok');
+      $('bCon').hidden=true;
+      $('bDesc').hidden=false;
       log('Reconexión exitosa');
       reconectando=false;
       activarWakeLock();
@@ -244,6 +325,8 @@ async function onDisconnect(){
   }
   reconectando=false;
   estado('Central desconectada. Toca Conectar a Central 3.0','er');
+  $('bCon').hidden=false;
+  $('bDesc').hidden=true;
 }
 
 function onEvt(ev){
@@ -279,6 +362,8 @@ async function conectar(){
     await chC.writeValueWithResponse(enc.encode('LAST'));
 
     estado('Conectado a '+dev.name,'ok');
+    $('bCon').hidden=true;
+    $('bDesc').hidden=false;
     activarWakeLock();
     iniciarPing();
   }catch(e){estado('Error: '+e.message,'er');log('ERR '+e.message)}
