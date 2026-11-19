@@ -40,21 +40,41 @@ body.fullscreen-mode #map{
   border-radius:0!important;border:0!important;margin:0!important;z-index:50!important
 }
 body.fullscreen-mode #cardHud{
-  position:fixed!important;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;
-  margin:0!important;z-index:100!important;background:rgba(19,27,38,0.88)!important;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  border:1px solid rgba(0,229,255,0.4)!important;box-shadow:0 10px 30px rgba(0,0,0,0.7)!important;
-  padding:10px 14px!important
+  position:fixed!important;top:max(8px,env(safe-area-inset-top));left:8px;right:8px;
+  margin:0!important;z-index:100!important;
+  background:rgba(11,15,23,0.45)!important;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  border:1px solid rgba(0,229,255,0.3)!important;
+  box-shadow:0 6px 20px rgba(0,0,0,0.35)!important;
+  padding:6px 12px!important;gap:8px!important;
+  transition:all .2s ease;cursor:pointer
+}
+body.fullscreen-mode #cardHud .big{
+  font-size:24px!important;line-height:1.1!important
+}
+body.fullscreen-mode #cardHud #ar{
+  font-size:36px!important;line-height:1!important
+}
+body.fullscreen-mode #cardHud .m{
+  font-size:11px!important
+}
+body.fullscreen-mode.hud-min #cardHud{
+  opacity:0.35!important;padding:4px 8px!important
+}
+body.fullscreen-mode.hud-min #cardHud:hover{
+  opacity:0.9!important
 }
 #bSalirFull{
-  display:none;position:fixed;bottom:max(18px,env(safe-area-inset-bottom));right:14px;z-index:1000;
-  background:rgba(19,27,38,0.92);color:var(--ac);border:1px solid var(--ac);padding:10px 16px;font-weight:700;
-  box-shadow:0 6px 20px rgba(0,0,0,0.6);border-radius:10px
+  display:none;position:fixed;bottom:max(14px,env(safe-area-inset-bottom));right:12px;z-index:1000;
+  background:rgba(11,15,23,0.50);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  color:var(--ac);border:1px solid rgba(0,229,255,0.35);padding:7px 12px;font-size:13px;font-weight:700;
+  box-shadow:0 4px 14px rgba(0,0,0,0.4);border-radius:8px
 }
 #bCenFull{
-  display:none;position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:14px;z-index:1000;
-  background:rgba(19,27,38,0.92);color:#fff;border:1px solid var(--bd);padding:10px 16px;font-weight:700;
-  box-shadow:0 6px 20px rgba(0,0,0,0.6);border-radius:10px
+  display:none;position:fixed;bottom:max(14px,env(safe-area-inset-bottom));left:12px;z-index:1000;
+  background:rgba(11,15,23,0.50);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  color:#fff;border:1px solid rgba(255,255,255,0.25);padding:7px 12px;font-size:13px;font-weight:700;
+  box-shadow:0 4px 14px rgba(0,0,0,0.4);border-radius:8px
 }
 body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:block!important}
 </style>
@@ -62,7 +82,7 @@ body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:block!im
 <body>
 <main>
 <h1 id="tit">CENTRAL GPS 3.0</h1>
-<div id="ver" class="m" style="margin:0 0 14px">Página v1.1 · Compatible con Firmware v1.0</div>
+<div id="ver" class="m" style="margin:0 0 14px">Página v1.2 · Compatible con Firmware v1.0</div>
 
 <div class="c">
   <button id="bCon">Conectar a Central 3.0</button>
@@ -91,13 +111,19 @@ body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:block!im
 </main>
 
 <script>
-const PAG_VER='1.1',PAG_FECHA='18-nov-2026',FW_MIN='1.0';
+const PAG_VER='1.2',PAG_FECHA='18-nov-2026',FW_MIN='1.0';
 const SVC='a1c30001-5b7e-4d3a-9c11-7e5f0a6b2d10',U=n=>'a1c3000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id),enc=new TextEncoder(),dec=new TextDecoder();
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,CARD=['N','NE','E','SE','S','SO','O','NO'];
 const COL=['#00e5ff','#00e676','#ffaa00','#ff3d71','#d946ef','#8b5cf6','#38bdf8','#f43f5e'];
 let dev,chC,chE,me=null,heading=null,demoT=null,gpsOn=false,map=null,mMe,fit=true,V={},sel=null,auto=true;
 let manualDisconnect=false;
+
+$('cardHud').onclick=()=>{
+  if(document.body.classList.contains('fullscreen-mode')){
+    document.body.classList.toggle('hud-min');
+  }
+};
 
 function toggleFullscreen(){
   const isFull=document.body.classList.toggle('fullscreen-mode');
