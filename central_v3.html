@@ -113,7 +113,7 @@ body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:flex!imp
 <body>
 <main>
 <h1 id="tit">CENTRAL GPS 3.0</h1>
-<div id="ver" class="m" style="margin:0 0 14px">Página v1.5 · Compatible con Firmware v1.0</div>
+<div id="ver" class="m" style="margin:0 0 14px">Página v1.6 · Compatible con Firmware v1.0</div>
 
 <div class="c">
   <button id="bCon">Conectar a Central 3.0</button>
@@ -142,7 +142,7 @@ body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:flex!imp
 </main>
 
 <script>
-const PAG_VER='1.5',PAG_FECHA='19-nov-2026',FW_MIN='1.0';
+const PAG_VER='1.6',PAG_FECHA='19-nov-2026',FW_MIN='1.0';
 const SVC='a1c30001-5b7e-4d3a-9c11-7e5f0a6b2d10',U=n=>'a1c3000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id),enc=new TextEncoder(),dec=new TextDecoder();
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,CARD=['N','NE','E','SE','S','SO','O','NO'];
@@ -220,7 +220,13 @@ function iniciarMapa(){
   if(map||!window.L)return;
   const p=Object.values(V).find(o=>o.pos);
   map=L.map('map').setView((p&&p.pos)||me||[25.6866,-100.3161],12);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19,
+    attribution:'&copy; OpenStreetMap',
+    updateWhenIdle:true,
+    updateWhenZooming:false,
+    keepBuffer:4
+  }).addTo(map);
   mMe=L.circleMarker([0,0],{radius:8,color:'#fff',weight:2,fillColor:'#2f80ed',fillOpacity:1});
   Object.values(V).forEach(capas);
   $('map').hidden=false;$('nomap').hidden=true;fit=true;refresh();
@@ -304,7 +310,7 @@ function iniciarGPS(){
     e=>{$('yo').textContent='Sin GPS del teléfono: '+e.message;gpsOn=false},{enableHighAccuracy:true,maximumAge:2000});
 }
 
-let wakeLock=null,pingTimer=null,reconectando=false;
+let wakeLock=null,pingTimer=null,reconectando=false,ultRxMs=Date.now();
 
 async function activarWakeLock(){
   try{
@@ -322,9 +328,11 @@ function iniciarPing(){
   if(pingTimer)clearInterval(pingTimer);
   pingTimer=setInterval(async()=>{
     if(!dev||!dev.gatt||!dev.gatt.connected||!chC)return;
+    // La Central ya envía Heartbeat (HB) cada 15s. Solo enviamos PING si llevamos >25s sin ningún reporte.
+    if(Date.now()-ultRxMs<25000)return;
     try{
       await chC.writeValueWithResponse(enc.encode('PING'));
-    }catch(e){log('Ping falló: '+e.message)}
+    }catch(e){log('Watchdog ping: '+e.message)}
   },10000);
 }
 function detenerPing(){
@@ -346,6 +354,7 @@ async function reintentar(fn,n,ms){
 
 async function onDisconnect(){
   detenerPing();
+  chC=null;chE=null;
   if(manualDisconnect){
     manualDisconnect=false;
     reconectando=false;
@@ -390,6 +399,7 @@ async function onDisconnect(){
 }
 
 function onEvt(ev){
+  ultRxMs=Date.now();
   const t=dec.decode(ev.target.value),p=t.split(',');
   if(p[0]==='POS'){log(t);nuevaPos(+p[3],+p[4],+p[2],+p[5],+p[6],p[1])}
   else if(p[0]==='INFO'){const fw=p[3]||'?';$('ver').textContent='Página v'+PAG_VER+' · firmware central '+fw+(parseFloat(fw)<parseFloat(FW_MIN)?' (incompatible)':' (compatible)');log(t)}
