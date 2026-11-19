@@ -235,6 +235,7 @@ async function conectar(){
     activarWakeLock();
     iniciarPing();
     if(guardado&&nDown>0){$('bBor').disabled=false;$('bBor').textContent='Borrar de la placa ('+nDown+' registros)'}
+    await cmd('TIME,'+Math.floor(Date.now()/1000),resp('TIME')).catch(()=>{});
     await info();await leerVent();await leerLora();await leerId();
   }catch(e){const m=(e&&(e.message||e.name))||String(e);estado('Error: '+m+(dev&&dev.gatt&&!dev.gatt.connected?' (si acabas de poner el PIN, toca Conectar otra vez)':''),'er');log('ERR '+m)}
 }
@@ -403,6 +404,7 @@ async function progLora(){
   const now=Date.now()/1000,L=new Date(Date.now()-6*3600e3),Y=L.getUTCFullYear(),M=L.getUTCMonth(),D=L.getUTCDate();
   let a=Date.UTC(Y,M,D,h1+6,m1)/1000,b=Date.UTC(Y,M,D,h2+6,m2)/1000;
   if(b<=a)b+=86400;if(b<=now){a+=86400;b+=86400}
+  await cmd('TIME,'+Math.floor(Date.now()/1000),resp('TIME')).catch(()=>{});
   mostrarLora(await cmd('SETLORA,'+a+','+b+','+$('lInt').value.trim(),resp('LORA')))}
 async function cancelarLora(){mostrarLora(await cmd('LORAOFF',resp('LORA')))}
 $('bLP').onclick=()=>progLora().catch(e=>estado(e.message,'er'));$('bLC').onclick=()=>cancelarLora().catch(e=>estado(e.message,'er'));$('bLL').onclick=()=>leerLora().catch(e=>estado(e.message,'er'));
