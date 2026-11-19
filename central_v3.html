@@ -31,7 +31,7 @@ button.d{background:var(--er);color:#fff}
 #chips button{margin:3px 6px 3px 0;padding:7px 12px;font-size:14px;border-radius:8px}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;border:1px solid #fff}
 #log{font:12px/1.35 ui-monospace,Menlo,monospace;color:var(--mut);max-height:100px;overflow:auto;white-space:pre-wrap;background:#090d14;padding:8px;border-radius:8px;border:1px solid #1a2333}
 
-/* Modo Pantalla Completa / Seguimiento */
+/* Modo Pantalla Completa / Barra Táctica Ultra-Compacta */
 body.fullscreen-mode{overflow:hidden}
 body.fullscreen-mode main{max-width:100%!important;padding:0!important;margin:0!important}
 body.fullscreen-mode main>*:not(#cardHud):not(#map):not(#bSalirFull):not(#bCenFull){display:none!important}
@@ -39,50 +39,81 @@ body.fullscreen-mode #map{
   position:fixed!important;top:0;left:0;width:100vw!important;height:100vh!important;height:100dvh!important;
   border-radius:0!important;border:0!important;margin:0!important;z-index:50!important
 }
+body.fullscreen-mode .leaflet-top{top:56px!important}
 body.fullscreen-mode #cardHud{
-  position:fixed!important;top:max(8px,env(safe-area-inset-top));left:8px;right:8px;
+  position:fixed!important;top:max(8px,env(safe-area-inset-top))!important;left:10px!important;right:10px!important;
+  display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;
+  background:rgba(11,15,23,0.70)!important;
+  border:1px solid rgba(0,229,255,0.45)!important;
+  border-radius:20px!important;
+  box-shadow:0 4px 16px rgba(0,0,0,0.4)!important;
+  padding:4px 14px!important;
+  height:42px!important;
   margin:0!important;z-index:100!important;
-  background:rgba(11,15,23,0.45)!important;
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-  border:1px solid rgba(0,229,255,0.3)!important;
-  box-shadow:0 6px 20px rgba(0,0,0,0.35)!important;
-  padding:6px 12px!important;gap:8px!important;
-  transition:all .2s ease;cursor:pointer
+  cursor:pointer;user-select:none;-webkit-user-select:none;
+  transition:all .25s ease;
 }
-body.fullscreen-mode #cardHud .big{
-  font-size:24px!important;line-height:1.1!important
+body.fullscreen-mode #cardHud .hud-lbl{display:none!important}
+body.fullscreen-mode #cardHud>div:nth-child(2){
+  order:1!important;display:flex!important;align-items:center!important;margin-right:6px!important
 }
 body.fullscreen-mode #cardHud #ar{
-  font-size:36px!important;line-height:1!important
+  font-size:24px!important;line-height:1!important;display:inline-block!important;filter:drop-shadow(0 0 6px var(--ac-glow))!important
 }
-body.fullscreen-mode #cardHud .m{
-  font-size:11px!important
+body.fullscreen-mode #cardHud>div:nth-child(1){
+  order:2!important;display:flex!important;align-items:baseline!important;gap:6px!important;flex-grow:1!important
 }
-body.fullscreen-mode.hud-min #cardHud{
-  opacity:0.35!important;padding:4px 8px!important
+body.fullscreen-mode #cardHud .big{
+  font-size:18px!important;font-weight:800!important;line-height:1!important;display:inline-block!important;color:#fff!important
 }
-body.fullscreen-mode.hud-min #cardHud:hover{
-  opacity:0.9!important
+body.fullscreen-mode #cardHud #rum{
+  font-size:11px!important;display:inline-block!important;color:var(--ac)!important;font-weight:600!important
+}
+body.fullscreen-mode #cardHud>div:nth-child(3){
+  order:3!important;margin-right:8px!important
+}
+body.fullscreen-mode #cardHud #sen{
+  font-size:11px!important;font-weight:600!important;white-space:nowrap!important
+}
+body.fullscreen-mode #cardHud>div:nth-child(4){
+  order:4!important
+}
+body.fullscreen-mode #cardHud #edad{
+  font-size:11px!important;font-weight:600!important;white-space:nowrap!important
+}
+/* Al tocar la barra HUD, se vuelve 100% transparente para ver el mapa sin ningún fondo */
+body.fullscreen-mode.hud-oculto #cardHud{
+  background:transparent!important;border-color:transparent!important;box-shadow:none!important
+}
+body.fullscreen-mode.hud-oculto #cardHud .big,
+body.fullscreen-mode.hud-oculto #cardHud #rum,
+body.fullscreen-mode.hud-oculto #cardHud #sen,
+body.fullscreen-mode.hud-oculto #cardHud #edad,
+body.fullscreen-mode.hud-oculto #cardHud #ar{
+  text-shadow:0 1px 3px #000,0 0 6px #000,0 0 2px #000!important
+}
+/* Botones circulares flotantes minimalistas */
+#bCenFull{
+  display:none;position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:14px;
+  width:44px;height:44px;border-radius:50%;padding:0;margin:0;
+  background:rgba(11,15,23,0.75);color:#fff;border:1px solid rgba(255,255,255,0.35);
+  font-size:22px;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,0.5);z-index:1000;
+  align-items:center;justify-content:center;cursor:pointer
 }
 #bSalirFull{
-  display:none;position:fixed;bottom:max(14px,env(safe-area-inset-bottom));right:12px;z-index:1000;
-  background:rgba(11,15,23,0.50);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-  color:var(--ac);border:1px solid rgba(0,229,255,0.35);padding:7px 12px;font-size:13px;font-weight:700;
-  box-shadow:0 4px 14px rgba(0,0,0,0.4);border-radius:8px
+  display:none;position:fixed;bottom:max(16px,env(safe-area-inset-bottom));right:14px;
+  width:44px;height:44px;border-radius:50%;padding:0;margin:0;
+  background:rgba(11,15,23,0.75);color:var(--ac);border:1px solid rgba(0,229,255,0.45);
+  font-size:20px;line-height:1;box-shadow:0 4px 14px rgba(0,0,0,0.5);z-index:1000;
+  align-items:center;justify-content:center;cursor:pointer
 }
-#bCenFull{
-  display:none;position:fixed;bottom:max(14px,env(safe-area-inset-bottom));left:12px;z-index:1000;
-  background:rgba(11,15,23,0.50);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-  color:#fff;border:1px solid rgba(255,255,255,0.25);padding:7px 12px;font-size:13px;font-weight:700;
-  box-shadow:0 4px 14px rgba(0,0,0,0.4);border-radius:8px
-}
-body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:block!important}
+body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:flex!important}
 </style>
 </head>
 <body>
 <main>
 <h1 id="tit">CENTRAL GPS 3.0</h1>
-<div id="ver" class="m" style="margin:0 0 14px">Página v1.3 · Compatible con Firmware v1.0</div>
+<div id="ver" class="m" style="margin:0 0 14px">Página v1.5 · Compatible con Firmware v1.0</div>
 
 <div class="c">
   <button id="bCon">Conectar a Central 3.0</button>
@@ -96,22 +127,22 @@ body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:block!im
 <div class="c" id="chips">Sin vehículos todavía</div>
 
 <div class="c g" id="cardHud">
-  <div><div class="m" id="vsel">Distancia al vehículo</div><div class="big" id="dist">--</div><div class="m" id="rum">Rumbo: --</div></div>
-  <div style="text-align:center"><span id="ar">&#9650;</span><div class="m" id="rel"></div></div>
-  <div><div class="m">Señal LoRa SX1262</div><div id="sen">--</div></div>
-  <div><div class="m">Último reporte</div><div id="edad">--</div></div>
+  <div><div class="m hud-lbl" id="vsel">Distancia al vehículo</div><div class="big" id="dist">--</div><div class="m" id="rum">Rumbo: --</div></div>
+  <div style="text-align:center"><span id="ar">&#9650;</span><div class="m hud-lbl" id="rel"></div></div>
+  <div><div class="m hud-lbl">Señal LoRa SX1262</div><div id="sen">--</div></div>
+  <div><div class="m hud-lbl">Último reporte</div><div id="edad">--</div></div>
 </div>
 
 <div id="map"></div>
-<button id="bCenFull" class="s" onclick="fit=true;refresh()">Centrar</button>
-<button id="bSalirFull" class="s" onclick="toggleFullscreen()">✕ Salir Pantalla Completa</button>
+<button id="bCenFull" class="s" onclick="fit=true;refresh()" title="Centrar mapa">⌖</button>
+<button id="bSalirFull" class="s" onclick="toggleFullscreen()" title="Salir pantalla completa">✕</button>
 <div class="m" id="nomap" hidden style="margin-top:6px">Sin mapa (no hay internet o no cargó). La distancia y el rumbo siguen funcionando.</div>
 <div class="c" style="margin-top:10px"><div class="m" id="pos">Vehículo: --</div><div class="m" id="yo">Tu posición: esperando GPS del teléfono...</div></div>
 <div class="c"><div id="log"></div></div>
 </main>
 
 <script>
-const PAG_VER='1.3',PAG_FECHA='19-nov-2026',FW_MIN='1.0';
+const PAG_VER='1.5',PAG_FECHA='19-nov-2026',FW_MIN='1.0';
 const SVC='a1c30001-5b7e-4d3a-9c11-7e5f0a6b2d10',U=n=>'a1c3000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id),enc=new TextEncoder(),dec=new TextDecoder();
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,CARD=['N','NE','E','SE','S','SO','O','NO'];
@@ -121,7 +152,7 @@ let manualDisconnect=false,conectando=false;
 
 $('cardHud').onclick=()=>{
   if(document.body.classList.contains('fullscreen-mode')){
-    document.body.classList.toggle('hud-min');
+    document.body.classList.toggle('hud-oculto');
   }
 };
 
