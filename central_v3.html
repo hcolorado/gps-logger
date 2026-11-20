@@ -113,7 +113,7 @@ body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:flex!imp
 <body>
 <main>
 <h1 id="tit">CENTRAL GPS 3.0</h1>
-<div id="ver" class="m" style="margin:0 0 14px">Página v1.7 · Compatible con Firmware v1.0</div>
+<div id="ver" class="m" style="margin:0 0 14px">Página v1.8 · Compatible con Firmware v1.0</div>
 
 <div class="c">
   <button id="bCon">Conectar a Central 3.0</button>
@@ -142,7 +142,7 @@ body.fullscreen-mode #bSalirFull,body.fullscreen-mode #bCenFull{display:flex!imp
 </main>
 
 <script>
-const PAG_VER='1.7',PAG_FECHA='19-nov-2026',FW_MIN='1.0';
+const PAG_VER='1.8',PAG_FECHA='19-nov-2026',FW_MIN='1.0';
 const SVC='a1c30001-5b7e-4d3a-9c11-7e5f0a6b2d10',U=n=>'a1c3000'+n+'-5b7e-4d3a-9c11-7e5f0a6b2d10';
 const $=id=>document.getElementById(id),enc=new TextEncoder(),dec=new TextDecoder();
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,CARD=['N','NE','E','SE','S','SO','O','NO'];
@@ -384,9 +384,10 @@ async function onDisconnect(){
       const s=await(await dev.gatt.connect()).getPrimaryService(SVC);
       chC=await s.getCharacteristic(U(2));chE=await s.getCharacteristic(U(3));
       chE.addEventListener('characteristicvaluechanged',onEvt);
-      await reintentar(()=>chE.startNotifications(),5,1000);
-      await chC.writeValueWithResponse(enc.encode('INFO'));
+      await reintentar(()=>chC.writeValueWithResponse(enc.encode('INFO')),5,1000);
+      await chE.startNotifications();
       await chC.writeValueWithResponse(enc.encode('LAST'));
+      await chC.writeValueWithResponse(enc.encode('INFO'));
       estado('Conectado a '+dev.name,'ok');
       $('bCon').hidden=true;
       $('bDesc').hidden=false;
@@ -438,12 +439,13 @@ async function conectar(){
     chC=await s.getCharacteristic(U(2));chE=await s.getCharacteristic(U(3));
     chE.addEventListener('characteristicvaluechanged',onEvt);
     
-    // Esperar pacientemente el emparejamiento PIN de iOS antes de enviar comandos
-    await reintentar(()=>chE.startNotifications(),15,2000);
+    // Dispara nativamente el emparejamiento PIN en iOS vía WRITE_AUTHEN (guía oficial Apple)
+    await reintentar(()=>chC.writeValueWithResponse(enc.encode('INFO')),15,2000);
+    await chE.startNotifications();
 
-    // Con el enlace autenticado y seguro, solicitar estado inicial
-    await chC.writeValueWithResponse(enc.encode('INFO'));
+    // Con el enlace autenticado y notificaciones listas, solicitar estado inicial y flota
     await chC.writeValueWithResponse(enc.encode('LAST'));
+    await chC.writeValueWithResponse(enc.encode('INFO'));
 
     estado('Conectado a '+dev.name,'ok');
     $('bCon').hidden=true;
